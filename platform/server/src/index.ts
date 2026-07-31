@@ -8,6 +8,7 @@ import { createRequire } from 'module';
 import { config } from './config/index.js';
 import { registerRoutes } from './core/routes.js';
 import { registerSocketHandlers } from './socket/index.js';
+import { getDb, closeDb } from './db/index.js';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
@@ -51,13 +52,20 @@ async function buildServer() {
 }
 
 async function start() {
+    // Initialise DB — runs migrations on first boot
+    getDb();
+
     const fastify = await buildServer();
     try {
         await fastify.listen({ host: config.host, port: config.port });
     } catch (err) {
         fastify.log.error(err);
+        closeDb();
         process.exit(1);
     }
+
+    process.on('SIGINT', () => { closeDb(); process.exit(0); });
+    process.on('SIGTERM', () => { closeDb(); process.exit(0); });
 }
 
 export { buildServer };
