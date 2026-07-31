@@ -2,7 +2,7 @@
   "name": "agora",
   "version": "0.1.0",
   "private": true,
-  "description": "AGORA platform â€” monorepo root",
+  "description": "AGORA platform — monorepo root",
   "workspaces": [
     "platform/server",
     "platform/phone-shell",
@@ -15,5 +15,10 @@
   },
   "engines": {
     "node": ">=22.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.13",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5"
   }
 }
