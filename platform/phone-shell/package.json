@@ -1,0 +1,11 @@
+{
+  "name": "@agora/phone-shell",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AGORA phone shell - Svelte 5 / SvelteKit",
+  "type": "module",
+  "scripts": {
+    "build": "echo phone-shell: SvelteKit setup deferred to M1.9",
+    "dev": "echo phone-shell: SvelteKit setup deferred to M1.9"
+  }
+}

@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+
+# Build output
+output/
+**/dist/
+**/.svelte-kit/
+**/build/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+**/.venv/
+*.egg-info/
+
+# Rust / Tauri
+target/
+**/target/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# SQLite databases
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+*.log
+logs/
+
+# AI model weights (too large for git)
+*.gguf
+*.safetensors
+*.ckpt
+*.bin
+
+# Tauri generated
+**/WixTools/

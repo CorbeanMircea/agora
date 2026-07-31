@@ -1,0 +1,19 @@
+{
+  "name": "agora",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AGORA platform â€” monorepo root",
+  "workspaces": [
+    "platform/server",
+    "platform/phone-shell",
+    "games/cronica/phone-ui"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev -w platform/server",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
