@@ -1,24 +1,26 @@
 /**
  * M1.7 — Round State Machine (Socket.IO handlers)
+ * M1.8 — Phase Timers integrated: timed phases start/cancel timers and
+ *         populate the `deadline` field in their broadcast events.
  *
- * Handles the `round:start` event (host → server).
- * Handles the `round:advance` event (host → server) for manual phase advancement.
+ * Handles:
+ *   round:start   — host → server: start a new round (WAITING → PROMPTING)
+ *   round:advance — host → server: manually advance phase
  *
  * Events emitted to room:
  *   round:waiting    { roundNumber, state }
- *   round:prompting  { roundNumber, state, deadline: null }
+ *   round:prompting  { roundNumber, state, deadline: number (epoch sec) | null }
  *   round:generating { roundNumber, state }
  *   round:revealing  { roundNumber, state }
- *   round:voting     { roundNumber, state, deadline: null }
+ *   round:voting     { roundNumber, state, deadline: number (epoch sec) | null }
  *   round:scoring    { roundNumber, state }
- *
- * The `deadline` field is null here — M1.8 (Phase Timers) will populate it.
+ *   timer:tick       { phase, remaining, deadline }   — every second while timed phase active
+ *   timer:expired    { phase, advancedTo }             — when timer fires
  */
 import type { Server, Socket } from 'socket.io';
 import {
     getDb,
     getRoomByCode,
-    getRoomById,
     setRoomState,
     createRound,
     getCurrentRound,
@@ -26,6 +28,12 @@ import {
     incrementRoundCount,
 } from '../db/index.js';
 import { nextState, isValidTransition, stateToEvent } from '../core/roundStateMachine.js';
+import {
+    startPhaseTimer,
+    cancelPhaseTimer,
+    isTimedPhase,
+    getPhaseDuration,
+} from '../core/timerManager.js';
 import type { RoomState } from '../db/types.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -45,20 +53,28 @@ type AckFn = (result: { ok: boolean; error?: string; state?: RoomState }) => voi
 
 /**
  * Broadcast a state-change event to every socket in the room channel.
+ * If the new state is a timed phase, starts a timer and includes the deadline.
  */
 function broadcastStateChange(
     io: Server,
     roomCode: string,
     state: RoomState,
     roundNumber: number,
+    roundId: number,
 ): void {
     const eventName = stateToEvent(state);
     const payload: Record<string, unknown> = { roundNumber, state };
 
-    // M1.8 will fill in deadlines; we emit null placeholders now so clients
-    // can forward-compatibly handle the field.
-    if (state === 'PROMPTING' || state === 'VOTING') {
-        payload['deadline'] = null;
+    if (isTimedPhase(state)) {
+        startPhaseTimer(roomCode, state, roundId);
+        // Compute deadline the same way startPhaseTimer does — at call time.
+        const durationSecs = getPhaseDuration(state) ?? 0;
+        payload['deadline'] = Math.floor(Date.now() / 1000) + durationSecs;
+    } else {
+        cancelPhaseTimer(roomCode);
+        if (state === 'PROMPTING' || state === 'VOTING') {
+            payload['deadline'] = null;
+        }
     }
 
     io.to(roomCode).emit(eventName, payload);
@@ -79,7 +95,6 @@ export function registerRoundHandlers(io: Server, socket: Socket): void {
             }
         };
 
-        // Validate payload
         if (
             typeof payload !== 'object' ||
             payload === null ||
@@ -109,24 +124,21 @@ export function registerRoundHandlers(io: Server, socket: Socket): void {
             return;
         }
 
-        // Create the next round record
         const roundNumber = room.round_count + 1;
         const round = createRound(db, room.id, roundNumber);
 
-        // Advance room + round state to PROMPTING
         setRoomState(db, room.id, 'PROMPTING');
         setRoundState(db, round.id, 'PROMPTING');
         incrementRoundCount(db, room.id);
 
-        broadcastStateChange(io, roomCode, 'PROMPTING', roundNumber);
+        broadcastStateChange(io, roomCode, 'PROMPTING', roundNumber, round.id);
         reply(true, undefined, 'PROMPTING');
     });
 
     /**
      * round:advance
      * Advances the current round to a specific next state.
-     * The requested `toState` must be the valid next state from current.
-     * This allows the host (or future automated timers) to drive phase transitions.
+     * Cancels any active timer before advancing.
      */
     socket.on('round:advance', (payload: unknown, ack?: AckFn) => {
         const reply = (ok: boolean, error?: string, state?: RoomState): void => {
@@ -156,7 +168,6 @@ export function registerRoundHandlers(io: Server, socket: Socket): void {
             return;
         }
 
-        // Validate the requested transition
         if (!isValidTransition(room.state, toState)) {
             const transition = nextState(room.state);
             const expected = transition.ok ? transition.nextState : '(none)';
@@ -173,13 +184,13 @@ export function registerRoundHandlers(io: Server, socket: Socket): void {
             return;
         }
 
-        // Persist state change
+        // Cancel any active timer before persisting the new state.
+        cancelPhaseTimer(roomCode);
+
         setRoomState(db, room.id, toState);
         setRoundState(db, round.id, toState);
 
-        // If cycling back to WAITING (end of scoring), we do NOT create a new
-        // round — that happens on the next round:start. Just reset room state.
-        broadcastStateChange(io, roomCode, toState, round.round_number);
+        broadcastStateChange(io, roomCode, toState, round.round_number, round.id);
         reply(true, undefined, toState);
     });
 }
