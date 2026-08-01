@@ -5,6 +5,7 @@ import type { Server as SocketIOServer } from 'socket.io';
 import type { FastifyBaseLogger } from 'fastify';
 import { registerPlayerJoinHandler } from './playerJoin.js';
 import { registerPlayerRejoinHandler, handlePlayerDisconnect } from './playerRejoin.js';
+import { registerRoundHandlers } from './roundHandlers.js';
 
 export function registerSocketHandlers(
     io: SocketIOServer,
@@ -15,6 +16,7 @@ export function registerSocketHandlers(
 
         registerPlayerJoinHandler(io, socket);
         registerPlayerRejoinHandler(io, socket);
+        registerRoundHandlers(io, socket);
 
         socket.on('disconnect', (reason) => {
             log.info({ socketId: socket.id, reason }, 'Client disconnected');
