@@ -1,9 +1,10 @@
 /**
  * M1.5 — Player Join Flow (Server Side)
+ * M1.6 — playerId now returned in ack for client sessionStorage persistence.
  *
  * Handles the `player:join` Socket.IO event.
  * Client sends:  { roomCode: string; nickname: string }
- * Ack response:  { ok: true } | { ok: false; error: string }
+ * Ack response:  { ok: true; playerId: string } | { ok: false; error: string }
  * Room broadcast: `player:joined` { players: { id: string; nickname: string }[] }
  */
 import type { Server, Socket } from 'socket.io';
@@ -21,14 +22,14 @@ interface JoinPayload {
     nickname: string;
 }
 
-type AckFn = (result: { ok: boolean; error?: string }) => void;
+type AckFn = (result: { ok: boolean; playerId?: string; error?: string }) => void;
 
 export function registerPlayerJoinHandler(io: Server, socket: Socket): void {
     socket.on('player:join', (payload: unknown, ack?: AckFn) => {
-        const reply = (ok: boolean, error?: string): void => {
+        const reply = (ok: boolean, playerId?: string, error?: string): void => {
             if (typeof ack === 'function') {
-                if (ok) {
-                    ack({ ok: true });
+                if (ok && playerId !== undefined) {
+                    ack({ ok: true, playerId });
                 } else {
                     ack({ ok: false, error: error ?? 'Unknown error' });
                 }
@@ -42,7 +43,7 @@ export function registerPlayerJoinHandler(io: Server, socket: Socket): void {
             typeof (payload as Record<string, unknown>)['roomCode'] !== 'string' ||
             typeof (payload as Record<string, unknown>)['nickname'] !== 'string'
         ) {
-            reply(false, 'Invalid payload: expected { roomCode, nickname }');
+            reply(false, undefined, 'Invalid payload: expected { roomCode, nickname }');
             return;
         }
 
@@ -52,11 +53,11 @@ export function registerPlayerJoinHandler(io: Server, socket: Socket): void {
 
         // --- Input validation ---
         if (roomCode.length !== 4) {
-            reply(false, 'Room code must be exactly 4 characters');
+            reply(false, undefined, 'Room code must be exactly 4 characters');
             return;
         }
         if (nickname.length < 1 || nickname.length > 24) {
-            reply(false, 'Nickname must be 1–24 characters');
+            reply(false, undefined, 'Nickname must be 1–24 characters');
             return;
         }
 
@@ -65,19 +66,19 @@ export function registerPlayerJoinHandler(io: Server, socket: Socket): void {
         // --- Room must exist ---
         const room = getRoomByCode(db, roomCode);
         if (room === undefined) {
-            reply(false, 'Room not found');
+            reply(false, undefined, 'Room not found');
             return;
         }
 
         // --- Room must be in WAITING state ---
         if (room.state !== 'WAITING') {
-            reply(false, 'Room is not accepting new players right now');
+            reply(false, undefined, 'Room is not accepting new players right now');
             return;
         }
 
         // --- Reject duplicate nicknames ---
         if (nicknameExistsInRoom(db, room.id, nickname)) {
-            reply(false, 'Nickname already taken in this room');
+            reply(false, undefined, 'Nickname already taken in this room');
             return;
         }
 
@@ -88,6 +89,10 @@ export function registerPlayerJoinHandler(io: Server, socket: Socket): void {
         // --- Join the Socket.IO room channel ---
         void socket.join(roomCode);
 
+        // --- Store playerId on socket for disconnect handling ---
+        socket.data['playerId'] = playerId;
+        socket.data['roomCode'] = roomCode;
+
         // --- Broadcast updated active player list to all room members ---
         const activePlayers = getPlayersByRoom(db, room.id)
             .filter((p) => p.active === 1)
@@ -95,6 +100,6 @@ export function registerPlayerJoinHandler(io: Server, socket: Socket): void {
 
         io.to(roomCode).emit('player:joined', { players: activePlayers });
 
-        reply(true);
+        reply(true, playerId);
     });
 }
