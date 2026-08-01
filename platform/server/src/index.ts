@@ -14,7 +14,7 @@ const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 const fastifySocketIO = require('fastify-socket.io');
 
-async function buildServer() {
+export async function buildServer() {
     const fastify = Fastify({
         // Cast to any: pino-pretty transport is valid at runtime but Fastify's
         // bundled pino types don't expose the `transport` field on their logger
@@ -51,8 +51,7 @@ async function buildServer() {
     return fastify;
 }
 
-async function start() {
-    // Initialise DB — runs migrations on first boot
+async function start(): Promise<void> {
     getDb();
 
     const fastify = await buildServer();
@@ -68,6 +67,10 @@ async function start() {
     process.on('SIGTERM', () => { closeDb(); process.exit(0); });
 }
 
-export { buildServer };
-
-start();
+// Only boot when run directly — argv[1] is jest.js when running tests
+if (!process.argv[1]?.includes('jest')) {
+    start().catch((err: unknown) => {
+        console.error(err);
+        process.exit(1);
+    });
+}

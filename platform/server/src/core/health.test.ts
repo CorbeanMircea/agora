@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { buildServer } from '../index.js';
+import { closeDb } from '../db/index.js';
 import type { FastifyInstance } from 'fastify';
 
 describe('M1.2 — Platform Server Bootstrap', () => {
@@ -12,8 +13,8 @@ describe('M1.2 — Platform Server Bootstrap', () => {
 
     afterAll(async () => {
         await fastify.close();
-        // Give Socket.IO a moment to drain its internal timers
-        await new Promise<void>((resolve) => setTimeout(resolve, 100));
+        closeDb();
+        await new Promise<void>((resolve) => setTimeout(resolve, 200));
     });
 
     test('GET /health returns 200 with { status: "ok" }', async () => {

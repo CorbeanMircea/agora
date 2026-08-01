@@ -21,7 +21,7 @@
     "socket.io": "^4.7.5"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^13.0.2",
+    "@types/better-sqlite3": "^7.6.11",
     "@types/jest": "^29.5.13",
     "@types/node": "^22.0.0",
     "@types/qrcode": "^1.5.5",

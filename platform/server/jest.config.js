@@ -10,4 +10,8 @@ export default {
         '^.+\\.tsx?$': ['ts-jest', { useESM: true }],
     },
     testMatch: ['**/src/**/*.test.ts'],
+    // Run test suites serially — they share a SQLite singleton
+    maxWorkers: 1,
+    // Give each suite enough time
+    testTimeout: 15000,
 };
