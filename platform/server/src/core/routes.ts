@@ -3,6 +3,7 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { roomRoutes } from '../routes/rooms.js';
+import { phoneRoutes } from '../routes/phone.js';
 
 export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     fastify.get('/health', async (_request, _reply) => {
@@ -10,4 +11,5 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     });
 
     await fastify.register(roomRoutes);
+    await fastify.register(phoneRoutes);
 }

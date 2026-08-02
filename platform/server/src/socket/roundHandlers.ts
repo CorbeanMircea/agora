@@ -91,7 +91,11 @@ export function registerRoundHandlers(io: Server, socket: Socket): void {
     socket.on('round:start', (payload: unknown, ack?: AckFn) => {
         const reply = (ok: boolean, error?: string, state?: RoomState): void => {
             if (typeof ack === 'function') {
-                ack(ok ? { ok: true, state } : { ok: false, error: error ?? 'Unknown error' });
+                if (ok) {
+                    ack(state !== undefined ? { ok: true, state } : { ok: true });
+                } else {
+                    ack({ ok: false, error: error ?? 'Unknown error' });
+                }
             }
         };
 
@@ -143,7 +147,11 @@ export function registerRoundHandlers(io: Server, socket: Socket): void {
     socket.on('round:advance', (payload: unknown, ack?: AckFn) => {
         const reply = (ok: boolean, error?: string, state?: RoomState): void => {
             if (typeof ack === 'function') {
-                ack(ok ? { ok: true, state } : { ok: false, error: error ?? 'Unknown error' });
+                if (ok) {
+                    ack(state !== undefined ? { ok: true, state } : { ok: true });
+                } else {
+                    ack({ ok: false, error: error ?? 'Unknown error' });
+                }
             }
         };
 

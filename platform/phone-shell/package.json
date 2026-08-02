@@ -5,7 +5,21 @@
   "description": "AGORA phone shell - Svelte 5 / SvelteKit",
   "type": "module",
   "scripts": {
-    "build": "echo phone-shell: SvelteKit setup deferred to M1.9",
-    "dev": "echo phone-shell: SvelteKit setup deferred to M1.9"
+    "build": "svelte-kit sync && vite build",
+    "dev": "vite dev --port 5173",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3.0.8",
+    "@sveltejs/kit": "^2.21.4",
+    "@sveltejs/vite-plugin-svelte": "^4.0.4",
+    "svelte": "^5.34.6",
+    "svelte-check": "^4.2.1",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.19"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.1"
   }
 }
