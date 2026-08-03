@@ -52,7 +52,7 @@ export async function roomRoutes(fastify: FastifyInstance): Promise<void> {
                 return reply.code(404).send({ error: 'Room not found' });
             }
 
-            const joinUrl = `${phoneBaseUrl()}/join?room=${room.code}`;
+            const joinUrl = `${phoneBaseUrl()}/phone/join?room=${room.code}`;
 
             const png = await QRCode.toBuffer(joinUrl, {
                 type: 'png',

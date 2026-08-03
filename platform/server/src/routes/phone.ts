@@ -13,13 +13,6 @@ import fs from 'node:fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/**
- * Resolved path to the phone shell dist directory.
- * From platform/server/src/routes/ up to platform/, then into phone-shell/dist
- *
- * src/routes -> src -> platform/server -> platform -> phone-shell/dist
- *   ../           ../       ../              phone-shell/dist
- */
 const PHONE_SHELL_DIST = path.resolve(__dirname, '../../../phone-shell/dist');
 
 export async function phoneRoutes(fastify: FastifyInstance): Promise<void> {
@@ -49,9 +42,20 @@ export async function phoneRoutes(fastify: FastifyInstance): Promise<void> {
         root: PHONE_SHELL_DIST,
         prefix: '/phone/',
         index: 'index.html',
-        // Serve index.html for any path not matching a file (SPA fallback)
-        wildcard: true,
-        // Disable caching in dev
+        // Disable wildcard so we can add the SPA fallback route ourselves
+        wildcard: false,
         cacheControl: false,
+    });
+
+    // SPA fallback — serve index.html for any /phone/* path that isn't a
+    // real static asset. SvelteKit handles routing client-side from there.
+    const indexHtml = fs.readFileSync(path.join(PHONE_SHELL_DIST, 'index.html'), 'utf-8');
+
+    fastify.get('/phone/*', async (_request, reply) => {
+        return reply
+            .code(200)
+            .header('Content-Type', 'text/html; charset=utf-8')
+            .header('Cache-Control', 'no-cache')
+            .send(indexHtml);
     });
 }
