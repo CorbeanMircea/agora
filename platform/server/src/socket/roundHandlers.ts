@@ -2,6 +2,7 @@
  * M1.7 — Round State Machine (Socket.IO handlers)
  * M1.8 — Phase Timers integrated.
  * M2.2 — Prompt assignment triggered on round:start.
+ * M2.3 — Prompt delivery: per-player prompts emitted privately on round:start.
  *
  * Handles:
  *   round:start   — host → server: start a new round (WAITING → PROMPTING)
@@ -26,6 +27,7 @@ import {
     getPhaseDuration,
 } from '../core/timerManager.js';
 import { assignPrompts } from '../core/promptAssignment.js';
+import type { AssignmentResult } from '../core/promptAssignment.js';
 import type { RoomState } from '../db/types.js';
 
 // ── Prompt pack (loaded once) ───────────────────────────────────────────────
@@ -73,6 +75,51 @@ function broadcastStateChange(
     }
 
     io.to(roomCode).emit(eventName, payload);
+}
+
+/**
+ * Delivers each player's assigned prompts to their socket privately.
+ *
+ * Uses the AssignmentResult returned by assignPrompts (which contains the
+ * resolved prompt text with [PLAYER] tokens substituted) to build the payload.
+ * Fetches all sockets in the room and matches each by socket.data.playerId.
+ *
+ * Called immediately after broadcastStateChange so round:prompts arrives
+ * right after round:prompting on the client.
+ */
+async function deliverPrompts(
+    io: Server,
+    roomCode: string,
+    roundNumber: number,
+    assignmentResult: AssignmentResult,
+): Promise<void> {
+    // Build a Map of playerId → resolved prompts for O(1) lookup
+    const playerPrompts = new Map(
+        assignmentResult.assignments.map((a) => [
+            a.playerId,
+            a.prompts.map((p) => ({ promptId: p.id, text: p.text })),
+        ]),
+    );
+
+    // Fetch all currently connected sockets in this room
+    const sockets = await io.in(roomCode).fetchSockets();
+
+    for (const socket of sockets) {
+        const playerId = socket.data['playerId'] as string | undefined;
+        if (playerId === undefined) {
+            // Host/observer socket — skip
+            continue;
+        }
+
+        const prompts = playerPrompts.get(playerId);
+        if (prompts === undefined || prompts.length === 0) {
+            // Player has no assignments (joined after assignment ran, or assignment
+            // failed for this player) — skip silently
+            continue;
+        }
+
+        socket.emit('round:prompts', { roundNumber, prompts });
+    }
 }
 
 // ── Handler registration ───────────────────────────────────────────────────
@@ -132,21 +179,24 @@ export function registerRoundHandlers(io: Server, socket: Socket): void {
 
         const safeMode = room.safe_mode === 1;
 
+        let assignmentResult: AssignmentResult | null = null;
         try {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-            assignPrompts(db, CRONICA_PACK, round.id, activePlayers, safeMode);
+            assignmentResult = assignPrompts(db, CRONICA_PACK, round.id, activePlayers, safeMode);
         } catch (err) {
-            // Log but do not block the round — prompts are a best-effort in M2.2.
-            // M2.3 (delivery) will handle the case of empty assignments gracefully.
-            socket.log?.warn?.(
-                { err },
-                'Prompt assignment failed — round will proceed without prompts',
-            );
+            // Log but do not block the round — delivery silently skipped
+            void err;
         }
         // ───────────────────────────────────────────────────────────────────
 
         broadcastStateChange(io, roomCode, 'PROMPTING', roundNumber, round.id);
         reply(true, undefined, 'PROMPTING');
+
+        // ── M2.3: Deliver prompts to each player privately ──────────────────
+        if (assignmentResult !== null) {
+            void deliverPrompts(io, roomCode, roundNumber, assignmentResult);
+        }
+        // ───────────────────────────────────────────────────────────────────
     });
 
     socket.on('round:advance', (payload: unknown, ack?: AckFn) => {
