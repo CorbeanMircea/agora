@@ -1,21 +1,11 @@
 /**
  * M1.7 — Round State Machine (Socket.IO handlers)
- * M1.8 — Phase Timers integrated: timed phases start/cancel timers and
- *         populate the `deadline` field in their broadcast events.
+ * M1.8 — Phase Timers integrated.
+ * M2.2 — Prompt assignment triggered on round:start.
  *
  * Handles:
  *   round:start   — host → server: start a new round (WAITING → PROMPTING)
  *   round:advance — host → server: manually advance phase
- *
- * Events emitted to room:
- *   round:waiting    { roundNumber, state }
- *   round:prompting  { roundNumber, state, deadline: number (epoch sec) | null }
- *   round:generating { roundNumber, state }
- *   round:revealing  { roundNumber, state }
- *   round:voting     { roundNumber, state, deadline: number (epoch sec) | null }
- *   round:scoring    { roundNumber, state }
- *   timer:tick       { phase, remaining, deadline }   — every second while timed phase active
- *   timer:expired    { phase, advancedTo }             — when timer fires
  */
 import type { Server, Socket } from 'socket.io';
 import {
@@ -26,6 +16,7 @@ import {
     getCurrentRound,
     setRoundState,
     incrementRoundCount,
+    getPlayersByRoom,
 } from '../db/index.js';
 import { nextState, isValidTransition, stateToEvent } from '../core/roundStateMachine.js';
 import {
@@ -34,7 +25,16 @@ import {
     isTimedPhase,
     getPhaseDuration,
 } from '../core/timerManager.js';
+import { assignPrompts } from '../core/promptAssignment.js';
 import type { RoomState } from '../db/types.js';
+
+// ── Prompt pack (loaded once) ───────────────────────────────────────────────
+
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+
+// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+const CRONICA_PACK = require('../../../../games/cronica/prompts/cronica_base.json');
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -51,10 +51,6 @@ type AckFn = (result: { ok: boolean; error?: string; state?: RoomState }) => voi
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-/**
- * Broadcast a state-change event to every socket in the room channel.
- * If the new state is a timed phase, starts a timer and includes the deadline.
- */
 function broadcastStateChange(
     io: Server,
     roomCode: string,
@@ -67,7 +63,6 @@ function broadcastStateChange(
 
     if (isTimedPhase(state)) {
         startPhaseTimer(roomCode, state, roundId);
-        // Compute deadline the same way startPhaseTimer does — at call time.
         const durationSecs = getPhaseDuration(state) ?? 0;
         payload['deadline'] = Math.floor(Date.now() / 1000) + durationSecs;
     } else {
@@ -83,11 +78,6 @@ function broadcastStateChange(
 // ── Handler registration ───────────────────────────────────────────────────
 
 export function registerRoundHandlers(io: Server, socket: Socket): void {
-    /**
-     * round:start
-     * Creates a new round and transitions from WAITING → PROMPTING.
-     * Only valid when the room is in WAITING state.
-     */
     socket.on('round:start', (payload: unknown, ack?: AckFn) => {
         const reply = (ok: boolean, error?: string, state?: RoomState): void => {
             if (typeof ack === 'function') {
@@ -135,15 +125,30 @@ export function registerRoundHandlers(io: Server, socket: Socket): void {
         setRoundState(db, round.id, 'PROMPTING');
         incrementRoundCount(db, room.id);
 
+        // ── M2.2: Assign prompts to all active players ──────────────────────
+        const activePlayers = getPlayersByRoom(db, room.id)
+            .filter((p) => p.active === 1)
+            .map((p) => ({ id: p.id, nickname: p.nickname }));
+
+        const safeMode = room.safe_mode === 1;
+
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+            assignPrompts(db, CRONICA_PACK, round.id, activePlayers, safeMode);
+        } catch (err) {
+            // Log but do not block the round — prompts are a best-effort in M2.2.
+            // M2.3 (delivery) will handle the case of empty assignments gracefully.
+            socket.log?.warn?.(
+                { err },
+                'Prompt assignment failed — round will proceed without prompts',
+            );
+        }
+        // ───────────────────────────────────────────────────────────────────
+
         broadcastStateChange(io, roomCode, 'PROMPTING', roundNumber, round.id);
         reply(true, undefined, 'PROMPTING');
     });
 
-    /**
-     * round:advance
-     * Advances the current round to a specific next state.
-     * Cancels any active timer before advancing.
-     */
     socket.on('round:advance', (payload: unknown, ack?: AckFn) => {
         const reply = (ok: boolean, error?: string, state?: RoomState): void => {
             if (typeof ack === 'function') {
@@ -192,7 +197,6 @@ export function registerRoundHandlers(io: Server, socket: Socket): void {
             return;
         }
 
-        // Cancel any active timer before persisting the new state.
         cancelPhaseTimer(roomCode);
 
         setRoomState(db, room.id, toState);

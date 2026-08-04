@@ -53,3 +53,20 @@ export function countSubmittedPlayers(
         .get(roundId);
     return row?.n ?? 0;
 }
+
+/**
+ * Returns all prompt assignments for a player in a round.
+ * These are round_answer rows seeded by the prompt assignment engine
+ * (submitted = 0, answer = '').
+ */
+export function getPromptAssignmentsByPlayer(
+    db: Database,
+    roundId: number,
+    playerId: string,
+): RoundAnswerRow[] {
+    return db
+        .prepare<[number, string], RoundAnswerRow>(
+            `SELECT * FROM round_answers WHERE round_id = ? AND player_id = ?`,
+        )
+        .all(roundId, playerId);
+}
