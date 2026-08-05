@@ -139,7 +139,7 @@ describe('M2.3 — Prompt Delivery', () => {
         p2.disconnect();
     });
 
-    test('prompt text has [PLAYER] tokens resolved (contains player nickname)', async () => {
+    test('prompt texts are ingredient questions with no unresolved tokens', async () => {
         const res = await fastify.inject({ method: 'POST', url: '/rooms' });
         const { code } = res.json() as { code: string };
 
@@ -163,7 +163,7 @@ describe('M2.3 — Prompt Delivery', () => {
             p3PromptsPromise,
         ]);
 
-        // No unresolved tokens remain
+        // Ingredient questions must never contain unresolved [PLAYER] tokens
         for (const { prompts } of [p1Data, p2Data, p3Data]) {
             for (const { text } of prompts) {
                 expect(text).not.toContain('[PLAYER]');
@@ -171,15 +171,15 @@ describe('M2.3 — Prompt Delivery', () => {
             }
         }
 
-        // Each player's prompts contain their own nickname
-        const checkNickname = (prompts: { text: string }[], nick: string): void => {
-            const hasNick = prompts.some((p) => p.text.includes(nick));
-            expect(hasNick).toBe(true);
-        };
-
-        checkNickname(p1Data.prompts, 'Elena');
-        checkNickname(p2Data.prompts, 'Florin');
-        checkNickname(p3Data.prompts, 'Gabi');
+        // Each player receives non-empty ingredient question texts
+        for (const { prompts } of [p1Data, p2Data, p3Data]) {
+            expect(prompts.length).toBeGreaterThanOrEqual(2);
+            for (const { text } of prompts) {
+                expect(text.length).toBeGreaterThan(0);
+                // Ingredient questions start with "Spune" in Romanian
+                expect(text).toMatch(/^Spune /i);
+            }
+        }
 
         p1.disconnect();
         p2.disconnect();

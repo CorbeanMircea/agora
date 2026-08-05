@@ -1,28 +1,24 @@
 /**
- * Prompt Assignment Engine — M2.2
+ * Prompt Assignment Engine — updated for Ingredient System
  *
- * Selects and assigns prompts to players at the start of each PROMPTING phase.
+ * Assigns ingredient questions to players ensuring semantic diversity
+ * across the round. Each round should cover as many different semantic
+ * categories as possible given the player count.
  *
- * Rules (GDD Section 4.2):
- *  - Each player receives PROMPTS_PER_PLAYER (2–3) prompts.
- *  - No two players receive the exact same prompt in the same round.
- *  - At least one prompt in the round references [PLAYER2] (cross-player prompt)
- *    when the room has ≥ 3 players.
- *  - Prompt categories are varied (no category used more than once per player).
- *  - Safe Mode filters prompts where safeMode === false.
- *  - Prompts used in previous rounds of the same session are de-prioritised
- *    (exhausted packs cycle — still usable, just lower weight).
- *  - Assignments are persisted to round_answers as empty rows (submitted = 0).
+ * Rules:
+ * - Each player receives PROMPTS_PER_PLAYER questions (default 2).
+ * - No two players receive the same question in the same round.
+ * - Across the round, no semantic category appears more than once
+ *   unless player count × PROMPTS_PER_PLAYER exceeds category count.
+ * - Questions used in previous rounds are de-prioritised.
+ * - Safe Mode has no effect on ingredient questions (all are safeMode: true)
+ *   but the filter is kept for forward compatibility.
  */
 import type { Database } from 'better-sqlite3';
 import type { PromptPack, PromptEntry } from '../interfaces/gameModule.js';
 import { upsertAnswer } from '../db/index.js';
 
-// ── Constants ───────────────────────────────────────────────────────────────
-
-export const PROMPTS_PER_PLAYER = 2; // base; bumped to 3 when pool is large enough
-
-// ── Types ───────────────────────────────────────────────────────────────────
+export const PROMPTS_PER_PLAYER = 2;
 
 export interface PlayerAssignment {
     playerId: string;
@@ -32,22 +28,11 @@ export interface PlayerAssignment {
 
 export interface AssignmentResult {
     assignments: PlayerAssignment[];
-    /** IDs of all prompts used this round (for cross-round dedup in future). */
     usedPromptIds: string[];
 }
 
-// ── Public API ──────────────────────────────────────────────────────────────
-
 /**
- * Assigns prompts to players and persists them as empty round_answers rows.
- *
- * @param db             - SQLite database instance
- * @param pack           - Prompt pack to draw from
- * @param roundId        - ID of the current round
- * @param players        - Array of { id, nickname } for all active players
- * @param safeMode       - Whether to filter adult prompts
- * @param usedInSession  - Set of promptIds used in previous rounds
- *                         (de-prioritised but not excluded when pool is small)
+ * Assigns ingredient questions to players with semantic category diversity.
  */
 export function assignPrompts(
     db: Database,
@@ -61,112 +46,89 @@ export function assignPrompts(
         throw new Error('Prompt assignment requires at least 2 players');
     }
 
-    // ── Filter pool ──────────────────────────────────────────────────────────
-
+    // Filter pool
     let pool = safeMode
         ? pack.prompts.filter((p) => p.safeMode)
         : pack.prompts.slice();
 
-    // Only include prompts whose minPlayers requirement is satisfied
     pool = pool.filter((p) => p.minPlayers <= players.length);
 
-    const promptsPerPlayer = pool.length >= players.length * 3 ? 3 : PROMPTS_PER_PLAYER;
-    const totalNeeded = players.length * promptsPerPlayer;
+    const totalNeeded = players.length * PROMPTS_PER_PLAYER;
 
     if (pool.length < totalNeeded) {
         throw new Error(
-            `Prompt pool too small: need at least ${totalNeeded} prompts, ` +
-            `have ${pool.length} (safeMode=${safeMode}, playerCount=${players.length})`,
+            `Prompt pool too small: need ${totalNeeded}, have ${pool.length}`,
         );
     }
 
-    // ── Sort pool: unused-this-session first, then previously-used ───────────
+    // Split into fresh and stale, shuffle each half
+    const fresh = shuffle(pool.filter((p) => !usedInSession.has(p.id)));
+    const stale = shuffle(pool.filter((p) => usedInSession.has(p.id)));
+    const orderedPool = [...fresh, ...stale];
 
-    const sortedPool: PromptEntry[] = [
-        ...pool.filter((p) => !usedInSession.has(p.id)),
-        ...pool.filter((p) => usedInSession.has(p.id)),
-    ];
-
-    // Shuffle within each half to get random ordering among equal-priority prompts
-    shuffleInPlace(sortedPool.slice(0, sortedPool.findIndex((p) => usedInSession.has(p.id)) === -1
-        ? sortedPool.length
-        : sortedPool.findIndex((p) => usedInSession.has(p.id))));
-
-    // Re-build with proper in-place shuffle of each half
-    const freshCount = sortedPool.filter((p) => !usedInSession.has(p.id)).length;
-    const freshHalf = sortedPool.slice(0, freshCount);
-    const staleHalf = sortedPool.slice(freshCount);
-    shuffleInPlace(freshHalf);
-    shuffleInPlace(staleHalf);
-    const orderedPool = [...freshHalf, ...staleHalf];
-
-    // ── Ensure at least one cross-player prompt is in the pool ───────────────
-
-    // Move a cross-player prompt to near the front so it gets picked first
-    if (players.length >= 3) {
-        const crossIdx = orderedPool.findIndex((p) => p.text.includes('[PLAYER2]'));
-        if (crossIdx > 0) {
-            // Swap it into position 0 so it's picked in the first player's batch
-            const [cross] = orderedPool.splice(crossIdx, 1);
-            orderedPool.unshift(cross!);
-        }
+    // Build a category → questions map for diversity-aware selection
+    const byCategory = new Map<string, PromptEntry[]>();
+    for (const p of orderedPool) {
+        if (!byCategory.has(p.category)) byCategory.set(p.category, []);
+        byCategory.get(p.category)!.push(p);
     }
 
-    // ── Assign prompts to players ─────────────────────────────────────────────
-    //
-    // Global set of already-assigned prompt IDs — guarantees uniqueness across
-    // all players in this round.
+    // Determine the round-level category sequence.
+    // We want totalNeeded slots filled with maximum category diversity.
+    const categories = [...byCategory.keys()];
+    const roundCategories = buildDiverseCategorySequence(
+        categories,
+        totalNeeded,
+    );
 
+    // Assign slots to players: player 0 gets slots 0,1 — player 1 gets slots 2,3 etc.
     const globallyAssigned = new Set<string>();
     const assignments: PlayerAssignment[] = [];
 
-    for (const player of players) {
+    for (let pi = 0; pi < players.length; pi++) {
+        const player = players[pi]!;
+        const slotStart = pi * PROMPTS_PER_PLAYER;
         const assigned: PromptEntry[] = [];
-        const usedCategories = new Set<string>();
 
-        // Pass 1: category-unique prompts not yet assigned to anyone
-        for (const prompt of orderedPool) {
-            if (assigned.length >= promptsPerPlayer) break;
-            if (globallyAssigned.has(prompt.id)) continue;
-            if (usedCategories.has(prompt.category)) continue;
+        for (let slot = slotStart; slot < slotStart + PROMPTS_PER_PLAYER; slot++) {
+            const category = roundCategories[slot];
+            if (category === undefined) break;
 
-            assigned.push(prompt);
-            usedCategories.add(prompt.category);
-            globallyAssigned.add(prompt.id);
-        }
+            const candidates = (byCategory.get(category) ?? [])
+                .filter((p) => !globallyAssigned.has(p.id));
 
-        // Pass 2 (relaxed): if still short, allow category repeats
-        if (assigned.length < promptsPerPlayer) {
-            for (const prompt of orderedPool) {
-                if (assigned.length >= promptsPerPlayer) break;
-                if (globallyAssigned.has(prompt.id)) continue;
-
-                assigned.push(prompt);
-                globallyAssigned.add(prompt.id);
+            if (candidates.length === 0) {
+                // Fallback: pick any unassigned question
+                const fallback = orderedPool.find((p) => !globallyAssigned.has(p.id));
+                if (fallback !== undefined) {
+                    assigned.push(fallback);
+                    globallyAssigned.add(fallback.id);
+                }
+                continue;
             }
+
+            const picked = candidates[0]!;
+            assigned.push(picked);
+            globallyAssigned.add(picked.id);
         }
 
-        if (assigned.length < promptsPerPlayer) {
+        if (assigned.length < PROMPTS_PER_PLAYER) {
             throw new Error(
-                `Could not assign ${promptsPerPlayer} unique prompts to player '${player.nickname}'. ` +
-                `Pool exhausted after assigning ${globallyAssigned.size} prompts.`,
+                `Could not assign ${PROMPTS_PER_PLAYER} questions to '${player.nickname}'. Pool exhausted.`,
             );
         }
 
-        // Substitute [PLAYER] / [PLAYER2] tokens with real nicknames
-        const processedPrompts = assigned.map((p) =>
-            resolvePlayerReferences(p, player, players),
-        );
-
+        // Ingredient questions use the player's nickname as the [PLAYER] token
+        // (kept for compatibility — ingredient texts don't use [PLAYER] but the
+        // field is part of the PromptEntry type)
         assignments.push({
             playerId: player.id,
             nickname: player.nickname,
-            prompts: processedPrompts,
+            prompts: assigned,
         });
     }
 
-    // ── Persist to SQLite ─────────────────────────────────────────────────────
-
+    // Persist to SQLite
     for (const assignment of assignments) {
         for (const prompt of assignment.prompts) {
             upsertAnswer(db, roundId, assignment.playerId, prompt.id, '', false);
@@ -179,38 +141,50 @@ export function assignPrompts(
     };
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
 /**
- * Replaces [PLAYER] with the player's own nickname and [PLAYER2] with a
- * randomly chosen OTHER player's nickname.
- *
- * Returns a new PromptEntry with the resolved text (id and metadata unchanged).
+ * Kept for compatibility with tests and future LLM prompt building.
+ * Ingredient questions don't use [PLAYER] tokens, so this is a no-op
+ * on the text, but the function signature is preserved.
  */
 export function resolvePlayerReferences(
     prompt: PromptEntry,
     self: { id: string; nickname: string },
     allPlayers: { id: string; nickname: string }[],
 ): PromptEntry {
-    const others = allPlayers.filter((p) => p.id !== self.id);
-    const other = others[Math.floor(Math.random() * others.length)];
+    // Ingredient questions are player-agnostic — return unchanged
+    return prompt;
+}
 
-    let text = prompt.text.replace(/\[PLAYER\]/g, self.nickname);
-    if (other !== undefined) {
-        text = text.replace(/\[PLAYER2\]/g, other.nickname);
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Builds a sequence of `count` categories with maximum diversity.
+ * Cycles through all available categories before repeating any.
+ *
+ * Example: 3 categories [A,B,C], count=7 → [A,B,C,A,B,C,A]
+ */
+function buildDiverseCategorySequence(
+    categories: string[],
+    count: number,
+): string[] {
+    const shuffled = shuffle([...categories]);
+    const result: string[] = [];
+    for (let i = 0; i < count; i++) {
+        result.push(shuffled[i % shuffled.length]!);
     }
-
-    return { ...prompt, text };
+    return result;
 }
 
 /**
- * Fisher-Yates in-place shuffle.
+ * Fisher-Yates shuffle — returns a new array.
  */
-function shuffleInPlace<T>(arr: T[]): void {
-    for (let i = arr.length - 1; i > 0; i--) {
+function shuffle<T>(arr: T[]): T[] {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        const tmp = arr[i]!;
-        arr[i] = arr[j]!;
-        arr[j] = tmp;
+        const tmp = a[i]!;
+        a[i] = a[j]!;
+        a[j] = tmp;
     }
+    return a;
 }

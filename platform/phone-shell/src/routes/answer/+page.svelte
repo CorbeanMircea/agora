@@ -15,7 +15,7 @@
     import { getSocket } from '$lib/socket.js';
     import { gameState } from '$lib/gameState.svelte.js';
 
-    const MAX_ANSWER_LENGTH = 120;
+    const MAX_ANSWER_LENGTH = 40;
 
     let submitting = $state(false);
     let submitted = $state(false);
@@ -67,7 +67,6 @@
     function handleInput(promptId: string, event: Event) {
         const target = event.currentTarget as HTMLTextAreaElement;
         const value = target.value.slice(0, MAX_ANSWER_LENGTH);
-        // Keep textarea in sync with trimmed value
         target.value = value;
         gameState.updateAnswer(promptId, value);
     }
@@ -88,11 +87,9 @@
             (ack?: { ok: boolean; error?: string }) => {
                 submitting = false;
                 if (!ack || ack.ok) {
-                    // Optimistic: navigate regardless (M2.5 handles server rejection)
                     submitted = true;
                     goto(`${base}/wait`);
                 } else {
-                    // Server rejected — show error but stay on screen
                     gameState.setError(ack.error ?? 'Eroare la trimitere. Încearcă din nou.');
                 }
             },
@@ -143,7 +140,7 @@
                             class="answer-input"
                             placeholder="Răspunsul tău…"
                             maxlength={MAX_ANSWER_LENGTH}
-                            rows={3}
+                            rows={2}
                             value={answer}
                             oninput={(e) => handleInput(prompt.promptId, e)}
                             disabled={submitting || submitted}
@@ -196,7 +193,6 @@
         overflow-y: auto;
     }
 
-    /* ── Top bar ──────────────────────────────────────────────────────── */
     .top-bar {
         position: sticky;
         top: 0;
@@ -235,7 +231,6 @@
         50%       { opacity: 0.6; }
     }
 
-    /* ── Loading state ────────────────────────────────────────────────── */
     .loading-state {
         flex: 1;
         display: flex;
@@ -250,7 +245,6 @@
         animation: pulse 2s ease-in-out infinite;
     }
 
-    /* ── Prompts list ─────────────────────────────────────────────────── */
     .prompts-list {
         flex: 1;
         display: flex;
@@ -259,7 +253,6 @@
         padding: 1.25rem 1.25rem 0;
     }
 
-    /* ── Prompt card ──────────────────────────────────────────────────── */
     .prompt-card {
         background: #16213e;
         border: 1px solid #2d3748;
@@ -290,7 +283,6 @@
         margin: 0;
     }
 
-    /* ── Input area ───────────────────────────────────────────────────── */
     .input-wrapper {
         position: relative;
     }
@@ -332,7 +324,6 @@
         color: #ef4444;
     }
 
-    /* ── Error banner ─────────────────────────────────────────────────── */
     .error-banner {
         margin: 0.75rem 1.25rem 0;
         background: #7f1d1d;
@@ -342,7 +333,6 @@
         font-size: 0.85rem;
     }
 
-    /* ── Submit area ──────────────────────────────────────────────────── */
     .submit-area {
         padding: 1rem 1.25rem 0;
         display: flex;

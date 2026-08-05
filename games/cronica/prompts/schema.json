@@ -2,7 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "https://agora.local/schemas/prompt-pack.json",
     "title": "PromptPack",
-    "description": "AGORA prompt pack schema — validates a complete set of prompts for use in a game module.",
+    "description": "AGORA ingredient question pack schema.",
     "type": "object",
     "required": [
         "id",
@@ -14,18 +14,15 @@
     "properties": {
         "id": {
             "type": "string",
-            "pattern": "^[a-z0-9_]+$",
-            "description": "Unique identifier for the pack, e.g. 'cronica_base'."
+            "pattern": "^[a-z0-9_]+$"
         },
         "name": {
             "type": "string",
-            "minLength": 1,
-            "description": "Display name (Romanian)."
+            "minLength": 1
         },
         "version": {
             "type": "string",
-            "pattern": "^\\d+\\.\\d+\\.\\d+$",
-            "description": "Semantic version string, e.g. '1.0.0'."
+            "pattern": "^\\d+\\.\\d+\\.\\d+$"
         },
         "prompts": {
             "type": "array",
@@ -49,40 +46,32 @@
             "properties": {
                 "id": {
                     "type": "string",
-                    "pattern": "^[a-z0-9_]+$",
-                    "description": "Globally unique identifier within the pack, e.g. 'cronica_001'."
+                    "pattern": "^[a-z0-9_]+$"
                 },
                 "text": {
                     "type": "string",
                     "minLength": 10,
-                    "maxLength": 300,
-                    "description": "The prompt text shown to players (Romanian)."
+                    "maxLength": 300
                 },
                 "category": {
                     "type": "string",
                     "enum": [
-                        "relatie",
-                        "munca",
-                        "familie",
-                        "situatie_absurda",
-                        "scandal_de_bloc",
-                        "decizie_proasta",
-                        "secret",
-                        "aventura",
-                        "ambitie",
-                        "infuntare"
-                    ],
-                    "description": "Thematic category."
+                        "CONCRET",
+                        "ABSTRACT",
+                        "ACTIUNE",
+                        "LOC",
+                        "NUMAR",
+                        "PROPRIU",
+                        "ATRIBUT"
+                    ]
                 },
                 "safeMode": {
-                    "type": "boolean",
-                    "description": "When true, safe for all audiences. When false, excluded in Safe Mode."
+                    "type": "boolean"
                 },
                 "minPlayers": {
                     "type": "integer",
                     "minimum": 2,
-                    "maximum": 8,
-                    "description": "Minimum number of players required for this prompt to make sense."
+                    "maximum": 8
                 }
             }
         }

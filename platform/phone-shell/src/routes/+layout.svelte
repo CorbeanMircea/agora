@@ -23,6 +23,18 @@
         socket.on('round:prompting', (data: { roundNumber: number; state: string; deadline?: number }) => {
             gameState.setPhase('prompting');
             gameState.setDeadline(data.deadline ?? null);
+            // Navigate to the answer screen; if prompts haven't arrived yet the
+            // screen will show a "loading prompts…" state until round:prompts fires.
+            goto(`${base}/answer`);
+        });
+
+        socket.on('round:prompts', (data: { roundNumber: number; prompts: { promptId: string; text: string }[] }) => {
+            gameState.setPrompts(data.roundNumber, data.prompts);
+            // Ensure we're on the answer screen (handles the case where
+            // round:prompts arrives before or after round:prompting navigation).
+            if (gameState.phase === 'prompting') {
+                goto(`${base}/answer`);
+            }
         });
 
         socket.on('round:generating', () => {
@@ -45,11 +57,13 @@
         socket.on('round:scoring', () => {
             gameState.setPhase('scoring');
             gameState.setDeadline(null);
+            gameState.clearRound();
         });
 
         socket.on('round:waiting', () => {
             gameState.setPhase('waiting');
             gameState.setDeadline(null);
+            goto(`${base}/wait`);
         });
 
         socket.on('timer:tick', (data: { phase: string; remaining: number; deadline: number }) => {
@@ -61,6 +75,7 @@
             socket.off('disconnect');
             socket.off('player:joined');
             socket.off('round:prompting');
+            socket.off('round:prompts');
             socket.off('round:generating');
             socket.off('round:revealing');
             socket.off('round:voting');

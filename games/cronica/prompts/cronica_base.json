@@ -1,427 +1,217 @@
 {
     "id": "cronica_base",
-    "name": "CRONICĂ — Pachetul de bază",
-    "version": "1.0.0",
+    "name": "CRONICĂ — Pachetul de ingrediente",
+    "version": "2.0.0",
     "prompts": [
         {
-            "id": "cronica_001",
-            "text": "Descrie momentul în care [PLAYER] a intrat în lift cu fostul său șef și liftul s-a blocat între etaje.",
-            "category": "munca",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "c_001", "text": "Spune un obiect pe care îl ai în casă dar nu îl folosești niciodată.", "category": "CONCRET", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_002",
-            "text": "Ce secret îngrozitor a descoperit [PLAYER] în dulapul bunicii sale?",
-            "category": "familie",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "c_002", "text": "Spune un animal neobișnuit.", "category": "CONCRET", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_003",
-            "text": "Care a fost motivul real pentru care [PLAYER] a fost dat afară de la locul de muncă anterior?",
-            "category": "munca",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "c_003", "text": "Spune un aliment pe care nu l-ai mâncat niciodată.", "category": "CONCRET", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_004",
-            "text": "Descrie cu lux de amănunte cearta dintre [PLAYER] și vecinul de la etaj 4 din cauza mașinii de spălat.",
-            "category": "scandal_de_bloc",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "c_004", "text": "Spune un vehicul pe care nu l-ai condus niciodată.", "category": "CONCRET", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_005",
-            "text": "Care este planul secret al lui [PLAYER] de a deveni cel mai bogat om din cartier?",
-            "category": "ambitie",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "c_005", "text": "Spune un obiect pe care l-ai cumpărat și ți-a părut rău.", "category": "CONCRET", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_006",
-            "text": "Descrie aventura neașteptată a lui [PLAYER] la supermarketul din colț la ora 11 noaptea.",
-            "category": "situatie_absurda",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "c_006", "text": "Spune un instrument muzical.", "category": "CONCRET", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_007",
-            "text": "Ce a găsit [PLAYER] sub canapea când a mutat mobila pentru prima dată în 3 ani?",
-            "category": "situatie_absurda",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "c_007", "text": "Spune un obiect care ar trebui să existe dar nu există.", "category": "CONCRET", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_008",
-            "text": "Descrie momentul în care [PLAYER] a trimis un mesaj greșit persoanei greșite și consecințele devastatoare.",
-            "category": "decizie_proasta",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "c_008", "text": "Spune un animal pe care nu ai vrea să îl întâlnești noaptea.", "category": "CONCRET", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_009",
-            "text": "Ce poveste romantică nespusă există între [PLAYER] și [PLAYER2]?",
-            "category": "relatie",
-            "safeMode": true,
-            "minPlayers": 3
+            "id": "c_009", "text": "Spune o plantă sau un copac.", "category": "CONCRET", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_010",
-            "text": "Descrie bătălia epică pentru ultimul loc de parcare dintre [PLAYER] și doamna Vișinescu.",
-            "category": "scandal_de_bloc",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "c_010", "text": "Spune un obiect pe care l-ai pierdut și nu l-ai mai găsit.", "category": "CONCRET", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_011",
-            "text": "Ce cadou absolut dezastruos a cumpărat [PLAYER] pentru nunta verișoarei sale?",
-            "category": "familie",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "a_001", "text": "Spune o emoție pe care nu ai simțit-o azi.", "category": "ABSTRACT", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_012",
-            "text": "Cum a reușit [PLAYER] să transforme o ședință de zoom de 15 minute într-un dezastru de 3 ore?",
-            "category": "munca",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "a_002", "text": "Spune un concept pe care nu îl înțelegi complet.", "category": "ABSTRACT", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_013",
-            "text": "Care este alianta secretă dintre [PLAYER] și [PLAYER2] împotriva restului grupului?",
-            "category": "infuntare",
-            "safeMode": true,
-            "minPlayers": 3
+            "id": "a_003", "text": "Spune ceva invizibil dar care există cu siguranță.", "category": "ABSTRACT", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_014",
-            "text": "Descrie expediția lui [PLAYER] la IKEA care a durat 7 ore și s-a terminat fără mobilă.",
-            "category": "aventura",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "a_004", "text": "Spune o calitate pe care o admiri la oameni.", "category": "ABSTRACT", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_015",
-            "text": "Ce decizie financiară catastrofală a luat [PLAYER] în urmă cu două săptămâni?",
-            "category": "decizie_proasta",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "a_005", "text": "Spune un sentiment pe care nu ai un cuvânt exact pentru el.", "category": "ABSTRACT", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_016",
-            "text": "Descrie motivul real pentru care [PLAYER] a blocat numărul soacrei sale.",
-            "category": "relatie",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "a_006", "text": "Spune ceva de care îți este frică dar nu ar trebui să îți fie.", "category": "ABSTRACT", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_017",
-            "text": "Ce plan ambițios are [PLAYER] de a cuceri piața de mici din cartier?",
-            "category": "ambitie",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "a_007", "text": "Spune un concept abstract dintr-un domeniu pe care nu îl cunoști.", "category": "ABSTRACT", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_018",
-            "text": "Descrie incidentul diplomatic dintre [PLAYER] și pisica vecinului de la scara B.",
-            "category": "scandal_de_bloc",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "a_008", "text": "Spune o idee pe care ai avut-o și ai uitat-o.", "category": "ABSTRACT", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_019",
-            "text": "Ce secret de familie a dezvăluit accidental [PLAYER] la masa de Crăciun?",
-            "category": "secret",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "a_009", "text": "Spune un mister pe care nu l-ai rezolvat niciodată.", "category": "ABSTRACT", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_020",
-            "text": "Cum a explicat [PLAYER] colegilor de serviciu că a venit cu o oră întârziere din cauza unui porumbel?",
-            "category": "situatie_absurda",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "a_010", "text": "Spune ceva ce toată lumea pretinde că înțelege dar nimeni nu înțelege.", "category": "ABSTRACT", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_021",
-            "text": "Care este rivalitatea nerezolvată dintre [PLAYER] și fratele său mai mic?",
-            "category": "familie",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "v_001", "text": "Spune ceva ce faci când ești plictisit.", "category": "ACTIUNE", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_022",
-            "text": "Descrie aventura lui [PLAYER] când a încercat să repare singur instalația de apă.",
-            "category": "aventura",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "v_002", "text": "Spune o acțiune pe care nu ai mai făcut-o de ani de zile.", "category": "ACTIUNE", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_023",
-            "text": "Ce secret profesional a vândut accidental [PLAYER] la un grătar cu colegii?",
-            "category": "secret",
-            "safeMode": false,
-            "minPlayers": 2
+            "id": "v_003", "text": "Spune ceva ce faci și nu recunoști în public.", "category": "ACTIUNE", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_024",
-            "text": "Descrie înfruntarea finală dintre [PLAYER] și [PLAYER2] pentru titlul de cel mai bun bucătar din grup.",
-            "category": "infuntare",
-            "safeMode": true,
-            "minPlayers": 3
+            "id": "v_004", "text": "Spune o acțiune care durează exact 3 secunde.", "category": "ACTIUNE", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_025",
-            "text": "Ce hobby ciudat a ascuns [PLAYER] față de toți timp de 5 ani?",
-            "category": "secret",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "v_005", "text": "Spune ceva ce nu ai curajul să faci dar îți dorești.", "category": "ACTIUNE", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_026",
-            "text": "Descrie momentul în care [PLAYER] a confundat o ședință importantă cu o petrecere de pensionare.",
-            "category": "munca",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "v_006", "text": "Spune o acțiune care face zgomot.", "category": "ACTIUNE", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_027",
-            "text": "Cum a reușit [PLAYER] să piardă mașina în parcarea unui mall timp de 4 ore?",
-            "category": "situatie_absurda",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "v_007", "text": "Spune ceva ce faci dimineața înainte de a te trezi complet.", "category": "ACTIUNE", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_028",
-            "text": "Ce pact secret au încheiat [PLAYER] și [PLAYER2] împotriva unui coleg urât?",
-            "category": "munca",
-            "safeMode": false,
-            "minPlayers": 3
+            "id": "v_008", "text": "Spune o acțiune care nu are sens dacă o faci singur.", "category": "ACTIUNE", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_029",
-            "text": "Descrie planul lui [PLAYER] de a deveni influencer după vârsta de 40 de ani.",
-            "category": "ambitie",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "v_009", "text": "Spune ceva ce faci și părinții tăi nu știu.", "category": "ACTIUNE", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_030",
-            "text": "Care este motivul adevărat pentru care [PLAYER] a rupt logodna acum 3 ani?",
-            "category": "relatie",
-            "safeMode": false,
-            "minPlayers": 2
+            "id": "v_010", "text": "Spune o acțiune pe care o faci când nimeni nu se uită.", "category": "ACTIUNE", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_031",
-            "text": "Descrie expediția de aventură a lui [PLAYER] la munte care a durat 2 km și s-a terminat cu ambulanța.",
-            "category": "aventura",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "l_001", "text": "Spune un loc din România unde nu ai vrea să fii acum.", "category": "LOC", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_032",
-            "text": "Ce decizie proastă a luat [PLAYER] după ce a văzut un tutorial pe YouTube?",
-            "category": "decizie_proasta",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "l_002", "text": "Spune un loc în care te-ai pierdut vreodată.", "category": "LOC", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_033",
-            "text": "Descrie petrecerea de ziua lui [PLAYER] la care au venit doar 2 persoane.",
-            "category": "situatie_absurda",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "l_003", "text": "Spune un loc la care visezi dar nu ai fost.", "category": "LOC", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_034",
-            "text": "Ce scandal epic s-a petrecut pe grupul de WhatsApp al familiei lui [PLAYER] luna trecută?",
-            "category": "familie",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "l_004", "text": "Spune un loc unde nu te-ai aștepta să găsești pe cineva cunoscut.", "category": "LOC", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_035",
-            "text": "Descrie rivalitatea dintre [PLAYER] și [PLAYER2] pentru același post de manager.",
-            "category": "infuntare",
-            "safeMode": true,
-            "minPlayers": 3
+            "id": "l_005", "text": "Spune un loc care există în orașul tău dar nu ai intrat niciodată.", "category": "LOC", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_036",
-            "text": "Ce plan megaloman are [PLAYER] pentru a-și îmbunătăți nota de la asociația de proprietari?",
-            "category": "scandal_de_bloc",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "l_006", "text": "Spune un loc unde nu ai vrea să primești vești proaste.", "category": "LOC", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_037",
-            "text": "Care este secretul rușinos pe care [PLAYER] îl ascunde față de [PLAYER2]?",
-            "category": "secret",
-            "safeMode": false,
-            "minPlayers": 3
+            "id": "l_007", "text": "Spune un loc care sună mai interesant decât este în realitate.", "category": "LOC", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_038",
-            "text": "Descrie aventura culinară a lui [PLAYER] când a încercat să facă sarmale pentru prima dată.",
-            "category": "aventura",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "l_008", "text": "Spune un loc unde ai fi cel mai nepotrivit om din cameră.", "category": "LOC", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_039",
-            "text": "Ce a pățit [PLAYER] când a decis să investească toți banii economisiți în criptomonede în 2022?",
-            "category": "decizie_proasta",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "l_009", "text": "Spune un loc pe care l-ai vizitat o singură dată și nu te-ai mai întors.", "category": "LOC", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_040",
-            "text": "Descrie cum a ajuns [PLAYER] să doarmă în mașină timp de o noapte din vina sa.",
-            "category": "relatie",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "l_010", "text": "Spune un loc unde nu ai dormit niciodată dar ai putea.", "category": "LOC", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_041",
-            "text": "Ce discurs motivațional a ținut [PLAYER] la propria nuntă care a scos plânset din nefine rude?",
-            "category": "situatie_absurda",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "n_001", "text": "Spune un număr între 1 și 1000.", "category": "NUMAR", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_042",
-            "text": "Care este visul ascuns al lui [PLAYER] de care îi este rușine să vorbească?",
-            "category": "ambitie",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "n_002", "text": "Spune câte minute crezi că ai pierdut azi.", "category": "NUMAR", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_043",
-            "text": "Descrie ultimul scandal de la adunarea generală a blocului provocat de [PLAYER].",
-            "category": "scandal_de_bloc",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "n_003", "text": "Spune numărul tău norocos.", "category": "NUMAR", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_044",
-            "text": "Ce strategie dubioasă folosește [PLAYER] pentru a evita să spele vasele?",
-            "category": "familie",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "n_004", "text": "Spune câți oameni crezi că te cunosc fără să știi.", "category": "NUMAR", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_045",
-            "text": "Descrie cum a descoperit [PLAYER] că șeful său îi fură ideile la ședințe.",
-            "category": "munca",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "n_005", "text": "Spune o sumă de bani care ți se pare ridicolă.", "category": "NUMAR", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_046",
-            "text": "Ce misiune periculoasă a acceptat [PLAYER] în schimbul unei pizza gratuite?",
-            "category": "aventura",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "n_006", "text": "Spune câte zile crezi că ai petrecut în total în mijloace de transport.", "category": "NUMAR", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_047",
-            "text": "Descrie înfruntarea dintre [PLAYER] și [PLAYER2] pentru telecomandă după 10 ani de căsnicie.",
-            "category": "infuntare",
-            "safeMode": true,
-            "minPlayers": 3
+            "id": "n_007", "text": "Spune un număr care apare des în viața ta.", "category": "NUMAR", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_048",
-            "text": "Ce decizie genială a luat [PLAYER] care s-a dovedit a fi cel mai mare dezastru al anului?",
-            "category": "decizie_proasta",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "n_008", "text": "Spune câte secrete crezi că ai.", "category": "NUMAR", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_049",
-            "text": "Care este secretul pe care [PLAYER] îl ține față de propria mamă de mai bine de 5 ani?",
-            "category": "secret",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "n_009", "text": "Spune câte kilograme ar trebui să cântărească ceva important pentru tine.", "category": "NUMAR", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_050",
-            "text": "Descrie cum a convins [PLAYER] pe toată lumea că cunoaște o vedetă celebră.",
-            "category": "ambitie",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "n_010", "text": "Spune un număr care ți se pare suspicios.", "category": "NUMAR", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_051",
-            "text": "Ce a pățit [PLAYER] când a încercat să repare calculatorul bunicului urmărind un tutorial de pe internet?",
-            "category": "situatie_absurda",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "p_001", "text": "Spune un prenume românesc pe care nu l-ai întâlnit la nimeni.", "category": "PROPRIU", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_052",
-            "text": "Descrie cum [PLAYER] a cumpărat accidental 40 de kilograme de orez online.",
-            "category": "decizie_proasta",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "p_002", "text": "Spune numele unui brand sau produs pe care îl consideri amuzant.", "category": "PROPRIU", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_053",
-            "text": "Ce aventură neplanificată l-a purtat pe [PLAYER] în trei județe diferite într-o singură zi?",
-            "category": "aventura",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "p_003", "text": "Spune un nume de cod pe care l-ai da unei operațiuni secrete.", "category": "PROPRIU", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_054",
-            "text": "Descrie drama din familia lui [PLAYER] când s-a aflat că el a votat altfel decât tot neamul.",
-            "category": "familie",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "p_004", "text": "Spune un prenume pe care nu l-ai da niciodată unui copil.", "category": "PROPRIU", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_055",
-            "text": "Care este tensiunea nerezolvată dintre [PLAYER] și [PLAYER2] de la ultimul Revelion?",
-            "category": "relatie",
-            "safeMode": true,
-            "minPlayers": 3
+            "id": "p_005", "text": "Spune numele unui loc inventat care sună real.", "category": "PROPRIU", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_056",
-            "text": "Ce plan a pus la cale [PLAYER] pentru a câștiga concursul de grătar din cartier?",
-            "category": "ambitie",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "p_006", "text": "Spune un titlu de film sau carte inventat.", "category": "PROPRIU", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_057",
-            "text": "Descrie bătălia tacită dintre [PLAYER] și [PLAYER2] pentru ultimul scaun liber la petrecere.",
-            "category": "infuntare",
-            "safeMode": true,
-            "minPlayers": 3
+            "id": "p_007", "text": "Spune porecla pe care ai da-o unui coleg de birou imaginar.", "category": "PROPRIU", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_058",
-            "text": "Ce scandal a izbucnit pe scara blocului din cauza parchetului pe care l-a pus [PLAYER] la ora 11 noaptea?",
-            "category": "scandal_de_bloc",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "p_008", "text": "Spune numele unei organizații fictive care sună oficial.", "category": "PROPRIU", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_059",
-            "text": "Care este secretul de afaceri pe care [PLAYER] l-a divulgat accidental la o cununie civilă?",
-            "category": "secret",
-            "safeMode": false,
-            "minPlayers": 2
+            "id": "p_009", "text": "Spune un prenume care ți se pare că aparține unui villain.", "category": "PROPRIU", "safeMode": true, "minPlayers": 2
         },
         {
-            "id": "cronica_060",
-            "text": "Descrie cum a reușit [PLAYER] să transforme o plimbare de 10 minute cu câinele într-o odisee de 2 ore.",
-            "category": "aventura",
-            "safeMode": true,
-            "minPlayers": 2
+            "id": "p_010", "text": "Spune numele unui sat românesc real sau inventat.", "category": "PROPRIU", "safeMode": true, "minPlayers": 2
+        },
+        {
+            "id": "t_001", "text": "Spune un adjectiv care descrie cum te simți când ești în lift cu un străin.", "category": "ATRIBUT", "safeMode": true, "minPlayers": 2
+        },
+        {
+            "id": "t_002", "text": "Spune o culoare neobișnuită sau o nuanță inventată.", "category": "ATRIBUT", "safeMode": true, "minPlayers": 2
+        },
+        {
+            "id": "t_003", "text": "Spune un adjectiv care nu ar trebui să se aplice oamenilor dar uneori se aplică.", "category": "ATRIBUT", "safeMode": true, "minPlayers": 2
+        },
+        {
+            "id": "t_004", "text": "Spune cum ar arăta o zi perfectă într-un singur cuvânt.", "category": "ATRIBUT", "safeMode": true, "minPlayers": 2
+        },
+        {
+            "id": "t_005", "text": "Spune un adjectiv care descrie cel mai bine biroul sau camera ta.", "category": "ATRIBUT", "safeMode": true, "minPlayers": 2
+        },
+        {
+            "id": "t_006", "text": "Spune cum ar suna liniștea dacă ar fi un adjectiv.", "category": "ATRIBUT", "safeMode": true, "minPlayers": 2
+        },
+        {
+            "id": "t_007", "text": "Spune un cuvânt care descrie un om pe care l-ai evitat recent.", "category": "ATRIBUT", "safeMode": true, "minPlayers": 2
+        },
+        {
+            "id": "t_008", "text": "Spune un adjectiv pe care nu l-ai folosi niciodată pe un CV.", "category": "ATRIBUT", "safeMode": true, "minPlayers": 2
+        },
+        {
+            "id": "t_009", "text": "Spune cum ar fi vremea în cea mai ciudată zi din viața ta.", "category": "ATRIBUT", "safeMode": true, "minPlayers": 2
+        },
+        {
+            "id": "t_010", "text": "Spune un cuvânt care descrie ceva ce există între frică și curiozitate.", "category": "ATRIBUT", "safeMode": true, "minPlayers": 2
         }
     ]
 }

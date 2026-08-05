@@ -1,55 +1,25 @@
-/**
- * Prompt pack validation utility — M2.1
- *
- * Provides TypeScript types (re-exported from the platform interface) and a
- * runtime validation function that checks a prompt pack JSON object against
- * the schema defined in schema.json.
- *
- * Usage:
- *   import { validatePromptPack } from './validate.js';
- *   const result = validatePromptPack(json);
- *   if (!result.ok) console.error(result.errors);
- */
-
-// Re-export the canonical types from the platform interface so game modules
-// import from one place.
 export type { PromptPack, PromptEntry } from '../../platform/server/src/interfaces/gameModule.js';
 
-// ── Category ────────────────────────────────────────────────────────────────
-
 /**
- * The 10 thematic categories a prompt may belong to.
- * Must match the enum in schema.json exactly.
+ * The 7 semantic ingredient categories.
+ * These replace the old narrative categories.
  */
 export const PROMPT_CATEGORIES = [
-    'relatie',
-    'munca',
-    'familie',
-    'situatie_absurda',
-    'scandal_de_bloc',
-    'decizie_proasta',
-    'secret',
-    'aventura',
-    'ambitie',
-    'infuntare',
+    'CONCRET',
+    'ABSTRACT',
+    'ACTIUNE',
+    'LOC',
+    'NUMAR',
+    'PROPRIU',
+    'ATRIBUT',
 ] as const;
 
 export type PromptCategory = (typeof PROMPT_CATEGORIES)[number];
-
-// ── Validation result ────────────────────────────────────────────────────────
 
 export type ValidationResult =
     | { ok: true }
     | { ok: false; errors: string[] };
 
-// ── Runtime validator ────────────────────────────────────────────────────────
-
-/**
- * Validates a raw JSON object against the PromptPack schema.
- *
- * This is a manual validator — no external schema library required so the
- * game module has zero extra runtime dependencies.
- */
 export function validatePromptPack(data: unknown): ValidationResult {
     const errors: string[] = [];
 
@@ -58,8 +28,6 @@ export function validatePromptPack(data: unknown): ValidationResult {
     }
 
     const pack = data as Record<string, unknown>;
-
-    // ── Top-level fields ──────────────────────────────────────────────────
 
     if (typeof pack['id'] !== 'string' || !/^[a-z0-9_]+$/.test(pack['id'])) {
         errors.push('id: must be a lowercase alphanumeric/underscore string');
@@ -77,8 +45,6 @@ export function validatePromptPack(data: unknown): ValidationResult {
     if ((pack['prompts'] as unknown[]).length === 0) {
         errors.push('prompts: must contain at least one entry');
     }
-
-    // ── Prompt entries ────────────────────────────────────────────────────
 
     const seenIds = new Set<string>();
 
@@ -132,17 +98,20 @@ export function validatePromptPack(data: unknown): ValidationResult {
         }
     }
 
-    // ── Category coverage check ───────────────────────────────────────────
-
+    // Every category must have at least 3 questions (ensures rotation variety)
     if (Array.isArray(pack['prompts'])) {
-        const categoriesPresent = new Set(
-            (pack['prompts'] as Record<string, unknown>[])
-                .map((p) => p['category'])
-                .filter((c) => typeof c === 'string'),
-        );
-        for (const required of PROMPT_CATEGORIES) {
-            if (!categoriesPresent.has(required)) {
-                errors.push(`Missing required category: '${required}'`);
+        const countPerCategory = new Map<string, number>();
+        for (const cat of PROMPT_CATEGORIES) countPerCategory.set(cat, 0);
+
+        for (const p of pack['prompts'] as Record<string, unknown>[]) {
+            if (typeof p['category'] === 'string' && countPerCategory.has(p['category'])) {
+                countPerCategory.set(p['category'], (countPerCategory.get(p['category']) ?? 0) + 1);
+            }
+        }
+
+        for (const [cat, count] of countPerCategory) {
+            if (count < 3) {
+                errors.push(`Category '${cat}' has only ${count} question(s) — minimum 3 required for rotation`);
             }
         }
     }
