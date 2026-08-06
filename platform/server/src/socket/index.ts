@@ -6,6 +6,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { registerPlayerJoinHandler } from './playerJoin.js';
 import { registerPlayerRejoinHandler, handlePlayerDisconnect } from './playerRejoin.js';
 import { registerRoundHandlers } from './roundHandlers.js';
+import { registerPlayerSubmitHandler } from './playerSubmit.js';
 import { initTimerManager } from '../core/timerManager.js';
 import { getDb, getRoomByCode, getPlayersByRoom } from '../db/index.js';
 
@@ -22,6 +23,7 @@ export function registerSocketHandlers(
         registerPlayerJoinHandler(io, socket);
         registerPlayerRejoinHandler(io, socket);
         registerRoundHandlers(io, socket);
+        registerPlayerSubmitHandler(io, socket);
 
         /**
          * host:watch
