@@ -10,7 +10,19 @@
  *
  * Fields sourced from GDD Section 1.3.
  */
-
+export type {
+    PresentationFormat,
+    RevealPacing,
+    IngredientRole,
+    StoryArc,
+    Archetype,
+    Twist,
+    CameraRule,
+    NarratorPersona,
+    SFXNote,
+    LayoutStrategy,
+    CreativeBrief,
+} from './creativeBrief.js';
 import type { RoomState } from '../db/types.js';
 
 // ── Phase Definition ────────────────────────────────────────────────────────
