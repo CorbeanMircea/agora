@@ -9,6 +9,7 @@ import {
     setRoomState,
     setRoundState,
     setRoundDeadline,
+    getPlayersByRoom,
 } from '../db/index.js';
 import { isValidTransition, stateToEvent } from './roundStateMachine.js';
 import type { RoomState } from '../db/types.js';
@@ -172,4 +173,53 @@ function _handleTimerExpiry(
 
     io.to(roomCode).emit(eventName, payload);
     io.to(roomCode).emit('timer:expired', { phase, advancedTo: toState });
+
+    // M2.6 — On PROMPTING expiry, notify the room of partial submission status.
+    // Players who didn't submit already have empty answer rows in SQLite (seeded
+    // by assignPrompts). We emit a summary so the host knows who submitted.
+    if (phase === 'PROMPTING') {
+        _emitPartialSubmissions(io, roomCode, room.id, round.id);
+    }
+}
+
+/**
+ * Emits `round:partial_submissions` to all sockets in the room.
+ * Payload lists every active player with a `submitted` boolean.
+ * Players who never submitted have their rows with submitted=0 already
+ * in SQLite from prompt assignment seeding.
+ */
+function _emitPartialSubmissions(
+    io: SocketIOServer,
+    roomCode: string,
+    roomId: number,
+    roundId: number,
+): void {
+    const db = getDb();
+
+    const activePlayers = getPlayersByRoom(db, roomId).filter((p) => p.active === 1);
+
+    // Build a set of playerIds that have at least one submitted=1 answer
+    const submittedRows = db
+        .prepare<[number], { player_id: string }>(
+            `SELECT DISTINCT player_id FROM round_answers WHERE round_id = ? AND submitted = 1`,
+        )
+        .all(roundId);
+
+    const submittedIds = new Set(submittedRows.map((r) => r.player_id));
+
+    const playerStatuses = activePlayers.map((p) => ({
+        playerId: p.id,
+        nickname: p.nickname,
+        submitted: submittedIds.has(p.id),
+    }));
+
+    const submittedCount = playerStatuses.filter((p) => p.submitted).length;
+    const totalCount = playerStatuses.length;
+
+    io.to(roomCode).emit('round:partial_submissions', {
+        players: playerStatuses,
+        submittedCount,
+        totalCount,
+        triggeredBy: 'timer_expiry',
+    });
 }
