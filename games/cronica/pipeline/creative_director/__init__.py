@@ -27,6 +27,12 @@ from .genre_selection import (
     select_genre,
     compute_genre_weights,
 )
+from .archetype_assignment import (
+    assign as assign_archetypes,
+    validate_assignments,
+    PlayerIngredient,
+    AssignedArchetype,
+)
 
 __all__ = [
     # models
@@ -56,4 +62,9 @@ __all__ = [
     # genre selection
     "select_genre",
     "compute_genre_weights",
+    # archetype assignment
+    "assign_archetypes",
+    "validate_assignments",
+    "PlayerIngredient",
+    "AssignedArchetype",
 ]
