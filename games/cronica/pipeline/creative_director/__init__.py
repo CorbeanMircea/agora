@@ -33,6 +33,11 @@ from .archetype_assignment import (
     PlayerIngredient,
     AssignedArchetype,
 )
+from .creative_director import (
+    CreativeDirector,
+    PlayerAnswer,
+    CreativeBriefValidationError,
+)
 
 __all__ = [
     # models
@@ -67,4 +72,8 @@ __all__ = [
     "validate_assignments",
     "PlayerIngredient",
     "AssignedArchetype",
+    # creative director
+    "CreativeDirector",
+    "PlayerAnswer",
+    "CreativeBriefValidationError",
 ]
