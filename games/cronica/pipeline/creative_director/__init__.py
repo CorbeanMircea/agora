@@ -23,6 +23,10 @@ from .format_registry import (
     get_compatible_formats,
     get_layout_for_panel_count,
 )
+from .genre_selection import (
+    select_genre,
+    compute_genre_weights,
+)
 
 __all__ = [
     # models
@@ -49,4 +53,7 @@ __all__ = [
     "list_formats",
     "get_compatible_formats",
     "get_layout_for_panel_count",
+    # genre selection
+    "select_genre",
+    "compute_genre_weights",
 ]
