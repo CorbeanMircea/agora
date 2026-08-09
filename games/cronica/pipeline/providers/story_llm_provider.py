@@ -78,7 +78,11 @@ class Story:
 
     # ── Validation helpers ────────────────────────────────────────────────
 
-    def validate(self, expected_panel_count: int) -> list[str]:
+    def validate(
+        self,
+        expected_panel_count: int,
+        expected_player_names: list[str] | None = None,
+    ) -> list[str]:
         """
         Return a list of validation error strings.
         An empty list means the story is structurally valid.
@@ -89,8 +93,9 @@ class Story:
           - image_prompts length matches panel count
           - title is non-empty
           - each panel has non-empty description_ro, image_prompt_en, narrator_line_ro
-          - image_prompt_en values are non-empty (English content checked separately)
+          - image_prompt_en values contain only ASCII characters (English heuristic)
           - narrator_script and image_prompts are consistent with panel data
+          - all expected player names appear somewhere in the story (if provided)
         """
         errors: list[str] = []
 
@@ -125,6 +130,13 @@ class Story:
                 errors.append(f"panels[{i}].image_prompt_en must not be empty")
             if not panel.narrator_line_ro.strip():
                 errors.append(f"panels[{i}].narrator_line_ro must not be empty")
+            # English heuristic: image prompts must be ASCII-only
+            # (Romanian diacritics indicate the prompt was accidentally written in Romanian)
+            if panel.image_prompt_en.strip() and not _is_ascii(panel.image_prompt_en):
+                errors.append(
+                    f"panels[{i}].image_prompt_en contains non-ASCII characters — "
+                    f"image prompts must be in English"
+                )
 
         # Consistency between convenience lists and panel data
         for i, (script_line, panel) in enumerate(
@@ -142,6 +154,15 @@ class Story:
                 errors.append(
                     f"image_prompts[{i}] does not match panels[{i}].image_prompt_en"
                 )
+
+        # Player name presence check
+        if expected_player_names:
+            story_text = _full_story_text(self)
+            for name in expected_player_names:
+                if name and name.strip() not in story_text:
+                    errors.append(
+                        f"player name '{name}' does not appear anywhere in the story"
+                    )
 
         return errors
 
@@ -193,6 +214,31 @@ class Story:
             narrator_script=list(data["narrator_script"]),
             image_prompts=list(data["image_prompts"]),
         )
+
+
+# ── Module-level validation helpers ──────────────────────────────────────────
+# These must live at module level so Story.validate() can reference them.
+
+def _is_ascii(text: str) -> bool:
+    """Return True if the string contains only ASCII characters."""
+    try:
+        text.encode("ascii")
+        return True
+    except UnicodeEncodeError:
+        return False
+
+
+def _full_story_text(story: Story) -> str:
+    """
+    Concatenate all narrative text fields from a story into one searchable string.
+    Used by the player-name presence check in Story.validate().
+    """
+    parts: list[str] = [story.title]
+    for panel in story.panels:
+        parts.append(panel.description_ro)
+        parts.append(panel.dialogue_ro)
+        parts.append(panel.narrator_line_ro)
+    return " ".join(parts)
 
 
 # ── Input dataclasses ─────────────────────────────────────────────────────────

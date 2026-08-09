@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://agora.local/schemas/story.json",
+  "title": "Story",
+  "description": "CRONICĂ story output schema — written to story.json by the LLM pipeline step.",
+  "type": "object",
+  "required": ["title", "panels", "narrator_script", "image_prompts"],
+  "additionalProperties": false,
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Story title in Romanian, shown on the presenter title card."
+    },
+    "panels": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 8,
+      "description": "Ordered list of panel descriptions. Length must equal brief.panel_count.",
+      "items": {
+        "$ref": "#/$defs/PanelDescription"
+      }
+    },
+    "narrator_script": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 8,
+      "description": "One narrator line per panel in order. Must mirror panels[i].narrator_line_ro.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "image_prompts": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 8,
+      "description": "One image prompt per panel in order. Must be in English. Must mirror panels[i].image_prompt_en.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[\\x00-\\x7F]+$",
+        "description": "ASCII-only string (English). Romanian diacritics are not permitted."
+      }
+    }
+  },
+  "$defs": {
+    "PanelDescription": {
+      "type": "object",
+      "required": [
+        "panel_index",
+        "description_ro",
+        "dialogue_ro",
+        "image_prompt_en",
+        "narrator_line_ro"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "panel_index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7,
+          "description": "0-based index matching the brief's panel sequence."
+        },
+        "description_ro": {
+          "type": "string",
+          "minLength": 20,
+          "description": "Scene description in Romanian (minimum 20 characters)."
+        },
+        "dialogue_ro": {
+          "type": "string",
+          "description": "Dialogue or caption text in Romanian. Empty string if no dialogue."
+        },
+        "image_prompt_en": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[\\x00-\\x7F]+$",
+          "description": "Image generation prompt in English (ASCII only). Fed directly to ComfyUI."
+        },
+        "narrator_line_ro": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The narrator's voice-over line for this panel, in Romanian."
+        },
+        "characters_in_panel": {
+          "type": "array",
+          "description": "Archetype keys of characters appearing in this panel.",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      }
+    }
+  }
+}
