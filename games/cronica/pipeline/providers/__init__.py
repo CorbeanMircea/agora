@@ -8,6 +8,7 @@ from .story_llm_provider import (
     PlayerAnswers,
     PlayerAnswerItem,
 )
+from .ollama_story_llm import OllamaStoryLLM
 
 __all__ = [
     "StoryLLMProvider",
@@ -15,4 +16,5 @@ __all__ = [
     "PanelDescription",
     "PlayerAnswers",
     "PlayerAnswerItem",
+    "OllamaStoryLLM",
 ]
