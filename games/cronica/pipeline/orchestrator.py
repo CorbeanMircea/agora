@@ -401,25 +401,164 @@ async def _step_story_generation(
     output_dir: Path,
 ) -> dict[str, Any]:
     """
-    M4.4 — Ollama LLM story generation.
-    Placeholder: writes stub story.json.
+    M4.4 / M4.6 — Ollama LLM story generation with post-generation validation.
+
+    Calls OllamaStoryLLM.generate_story_with_retry() which:
+      1. Builds the system prompt from the CreativeBrief (M4.5).
+      2. Calls Ollama's /api/chat endpoint.
+      3. Validates the response; retries once with error feedback on failure.
+
+    M4.6 validation layer:
+      - All player names must appear in the story.
+      - All image prompts must be ASCII-only English strings.
+      - Panel count must match brief.panel_count.
+      - Each panel must have non-empty description, image prompt, and narrator line.
+      - On two consecutive failures, a fallback minimal story is generated so
+        the pipeline never crashes a round due to LLM failure.
+
+    The final story (LLM-generated or fallback) is written to story.json.
     """
-    log.info(
-        "[Step 2] Story Generation — genre: %s",
-        brief.get("genre_key", "unknown"),
-    )
-    stub_story: dict[str, Any] = {
-        "title": "Povestea de test",
-        "panels": [],
-        "narratorScript": [],
-        "imagePrompts": [],
-        "_stub": True,
-    }
-    (output_dir / "story.json").write_text(
-        __import__("json").dumps(stub_story, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    return stub_story
+    import json as _json
+
+    genre_key = brief.get("genre_key", "unknown")
+    panel_count: int = int(brief.get("panel_count", 5))
+    log.info("[Step 2] Story Generation — genre: %s, panels: %d", genre_key, panel_count)
+
+    player_names = [pa.nickname for pa in request.player_answers]
+
+    try:
+        from .providers.ollama_story_llm import OllamaStoryLLM
+        from .providers.story_llm_provider import PlayerAnswers, PlayerAnswerItem, Story
+        from .creative_director.models import CreativeBrief
+
+        # Reconstruct a CreativeBrief from the dict produced by Step 1.
+        # Falls back gracefully if brief is a stub (missing required fields).
+        brief_obj: Any = None
+        if not brief.get("_stub"):
+            try:
+                brief_obj = CreativeBrief.from_dict(brief)
+            except Exception as exc:
+                log.warning(
+                    "[Step 2] Could not reconstruct CreativeBrief from dict: %s — "
+                    "generating fallback story",
+                    exc,
+                )
+
+        if brief_obj is None:
+            # brief is a stub or unparseable — generate fallback immediately
+            story = Story.generate_fallback(
+                panel_count=panel_count,
+                player_names=player_names,
+                genre_name=brief.get("genre", "Poveste"),
+            )
+            log.warning("[Step 2] Using fallback story (brief unavailable)")
+        else:
+            # Build PlayerAnswers list from the pipeline request.
+            # The orchestrator receives flat dicts; we map them to PlayerAnswers
+            # using the archetype assignments already in the CreativeBrief.
+            archetype_map = {
+                arch.player_id: arch
+                for arch in brief_obj.archetypes
+                if arch.player_id is not None
+            }
+
+            player_answers_list: list[PlayerAnswers] = []
+            for pa in request.player_answers:
+                arch = archetype_map.get(pa.player_id)
+                archetype_key = arch.key if arch else "personaj"
+                archetype_name_ro = arch.name_ro if arch else "Personaj"
+                ingredient_roles = arch.ingredient_roles if arch else {}
+
+                items = [
+                    PlayerAnswerItem(
+                        prompt_id=a["prompt_id"],
+                        category=a.get("category", "CONCRET"),
+                        ingredient_role=(
+                            ingredient_roles.get(a["prompt_id"], "OBJECT").value
+                            if hasattr(ingredient_roles.get(a["prompt_id"], "OBJECT"), "value")
+                            else str(ingredient_roles.get(a["prompt_id"], "OBJECT"))
+                        ),
+                        answer_text=a.get("answer_text", ""),
+                    )
+                    for a in pa.answers
+                ]
+
+                player_answers_list.append(PlayerAnswers(
+                    player_id=pa.player_id,
+                    nickname=pa.nickname,
+                    archetype_key=archetype_key,
+                    archetype_name_ro=archetype_name_ro,
+                    answers=items,
+                ))
+
+            llm = OllamaStoryLLM()
+            story: Story
+
+            try:
+                story = llm.generate_story_with_retry(
+                    brief_obj,
+                    player_answers_list,
+                    max_attempts=2,
+                )
+                # M4.6: final validation with player name check
+                final_errors = story.validate(
+                    panel_count,
+                    expected_player_names=player_names,
+                )
+                if final_errors:
+                    log.warning(
+                        "[Step 2] Story passed retry but failed final validation "
+                        "(%d error(s)) — using fallback. Errors: %s",
+                        len(final_errors),
+                        final_errors,
+                    )
+                    story = Story.generate_fallback(
+                        panel_count=panel_count,
+                        player_names=player_names,
+                        genre_name=brief_obj.genre,
+                    )
+                else:
+                    log.info("[Step 2] Story validated successfully")
+
+            except Exception as exc:
+                log.warning(
+                    "[Step 2] LLM generation failed after all attempts: %s — "
+                    "using fallback story",
+                    exc,
+                )
+                story = Story.generate_fallback(
+                    panel_count=panel_count,
+                    player_names=player_names,
+                    genre_name=getattr(brief_obj, "genre", "Poveste"),
+                )
+
+        story_dict = story.to_dict()
+        (output_dir / "story.json").write_text(
+            _json.dumps(story_dict, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        log.info(
+            "[Step 2] story.json written — title: %s, panels: %d",
+            story_dict.get("title", "?"),
+            len(story_dict.get("panels", [])),
+        )
+        return story_dict
+
+    except ImportError as exc:
+        # Running in a test environment without the full AI stack.
+        log.warning("[Step 2] OllamaStoryLLM not available (%s) — writing stub story.json", exc)
+        stub_story: dict[str, Any] = {
+            "title": "Povestea de test",
+            "panels": [],
+            "narrator_script": [],
+            "image_prompts": [],
+            "_stub": True,
+        }
+        (output_dir / "story.json").write_text(
+            _json.dumps(stub_story, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return stub_story
 
 
 async def _step_image_generation(

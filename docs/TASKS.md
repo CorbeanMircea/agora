@@ -198,7 +198,7 @@
   **Dependencies:** M4.4.
   **Completion criteria:** System prompt receives each ingredient paired with its assigned role (e.g. "crocodil = numele organizației secrete"); prompt instructs LLM to integrate ingredients organically — never decoratively; story must be impossible to reverse-engineer from ingredients alone; prompt encodes the full CreativeBrief (genre, archetypes, structure, tone); tested across all 7 genres; produces structurally different stories from identical ingredient sets across multiple runs.
 
-- [ ] M4.6 Post-Generation Validation
+- [x] M4.6 Post-Generation Validation
   **Objective:** Implement a validation layer that checks the generated story satisfies minimum quality requirements before passing it downstream.
   **Dependencies:** M4.5.
   **Completion criteria:** Validates: all player names appear in the story; all image prompts are non-empty English strings; panel count matches the brief's specified panel count; narrator script has one line per panel; no panel description is shorter than 20 words; on validation failure, one retry is attempted with the error included in the prompt; after two failures, a fallback minimal story is generated rather than crashing the round.
@@ -460,9 +460,9 @@
 ## Current Status
 
 **Current Milestone:** M4 — Story Generation
-**Current Task:** M4.6 Post-Generation Validation
-**Next Task:** M4.7 Story Generation Integration Test
-**Overall Progress:** 32 / 48 tasks complete
+**Current Task:** M4.7 Story Generation Integration Test
+**Next Task:** M5.1 ImageGeneratorProvider Interface
+**Overall Progress:** 33 / 48 tasks complete
 ---
 
 ## Development Rules

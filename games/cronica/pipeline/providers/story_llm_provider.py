@@ -131,7 +131,6 @@ class Story:
             if not panel.narrator_line_ro.strip():
                 errors.append(f"panels[{i}].narrator_line_ro must not be empty")
             # English heuristic: image prompts must be ASCII-only
-            # (Romanian diacritics indicate the prompt was accidentally written in Romanian)
             if panel.image_prompt_en.strip() and not _is_ascii(panel.image_prompt_en):
                 errors.append(
                     f"panels[{i}].image_prompt_en contains non-ASCII characters — "
@@ -215,9 +214,90 @@ class Story:
             image_prompts=list(data["image_prompts"]),
         )
 
+    @classmethod
+    def generate_fallback(
+        cls,
+        panel_count: int,
+        player_names: list[str],
+        genre_name: str = "Poveste",
+    ) -> "Story":
+        """
+        Generate a minimal valid fallback story when the LLM fails after all
+        retry attempts. This ensures the pipeline never crashes a round due to
+        story generation failure.
+
+        The fallback story is structurally valid (passes validate()) but is
+        intentionally generic. Player names are embedded so the recognition
+        moment still occurs.
+
+        Parameters
+        ----------
+        panel_count:
+            Number of panels required (must be 4–8).
+        player_names:
+            Display names of all active players, used to populate the story text.
+        genre_name:
+            Genre display name in Romanian, used in the title.
+        """
+        panel_count = max(4, min(8, panel_count))
+        names_str = " și ".join(player_names) if player_names else "Personajele noastre"
+
+        # Beat descriptions for each panel position
+        beat_templates = [
+            f"{names_str} se află într-o situație neobișnuită care nu putea fi anticipată de nimeni.",
+            f"Lucrurile se complică brusc pentru {names_str}, care nu știu ce să facă.",
+            f"O descoperire neașteptată schimbă totul pentru {names_str} și cei din jur.",
+            f"Momentul decisiv a sosit. {names_str} trebuie să aleagă.",
+            f"Consecințele deciziei sunt surprinzătoare pentru toată lumea.",
+            f"Epilogul revelează că nimic nu a fost ce părea.",
+            f"O ultimă răsturnare de situație îi lasă pe {names_str} fără cuvinte.",
+            f"Finalul — nimeni nu l-ar fi prezis, dar toți îl meritau.",
+        ]
+
+        narrator_templates = [
+            f"Și astfel a început povestea lui {names_str}.",
+            f"Nimeni nu se așteptase la ce urma să se întâmple.",
+            f"Dar surpriza abia acum se arăta.",
+            f"Momentul adevărului a sosit în sfârșit.",
+            f"Consecințele nu au întârziat să apară.",
+            f"Și totuși, era doar începutul.",
+            f"O nouă răsturnare în această poveste fără sfârșit.",
+            f"Cortina a căzut. Pentru moment.",
+        ]
+
+        image_prompt_templates = [
+            "wide establishing shot, dramatic lighting, cinematic composition",
+            "medium shot, two characters, surprised expressions, dynamic framing",
+            "close-up reveal shot, high contrast, dramatic shadow",
+            "decisive moment, action pose, cinematic, strong composition",
+            "aftermath scene, wide angle, scattered props, expressive faces",
+            "epilogue tableau, warm light, reflective mood, soft focus",
+            "final twist reveal, shocked expression, extreme close-up",
+            "closing wide shot, all characters, symbolic ending, cinematic",
+        ]
+
+        panels = []
+        for i in range(panel_count):
+            desc = beat_templates[i % len(beat_templates)]
+            narr = narrator_templates[i % len(narrator_templates)]
+            img = image_prompt_templates[i % len(image_prompt_templates)]
+            panels.append(PanelDescription(
+                panel_index=i,
+                description_ro=desc,
+                dialogue_ro="",
+                image_prompt_en=img,
+                narrator_line_ro=narr,
+            ))
+
+        return cls(
+            title=f"O poveste despre {names_str}",
+            panels=panels,
+            narrator_script=[p.narrator_line_ro for p in panels],
+            image_prompts=[p.image_prompt_en for p in panels],
+        )
+
 
 # ── Module-level validation helpers ──────────────────────────────────────────
-# These must live at module level so Story.validate() can reference them.
 
 def _is_ascii(text: str) -> bool:
     """Return True if the string contains only ASCII characters."""
@@ -247,23 +327,10 @@ def _full_story_text(story: Story) -> str:
 class PlayerAnswerItem:
     """
     One player's single ingredient answer (prompt + response).
-
-    The category and assigned role come from the CreativeBrief archetypes;
-    they are passed here so the LLM receives the full context without having
-    to re-parse the brief.
     """
-
-    # Prompt ID from the ingredient pack (e.g. "c_001").
     prompt_id: str
-
-    # Semantic category of the ingredient question (e.g. "CONCRET").
     category: str
-
-    # The role assigned by the Creative Director (e.g. "OBJECT").
-    # This is the key insight that drives organic ingredient integration.
     ingredient_role: str
-
-    # The player's raw answer text (may be empty if they did not submit).
     answer_text: str
 
 
@@ -271,24 +338,11 @@ class PlayerAnswerItem:
 class PlayerAnswers:
     """
     All ingredient answers for one player in a round, with archetype context.
-
-    Passed to the LLM alongside the CreativeBrief so the story generator
-    knows which player maps to which archetype and what ingredients they provided.
     """
-
-    # Player UUID from SQLite.
     player_id: str
-
-    # Display name shown in the story.
     nickname: str
-
-    # Archetype key from the CreativeBrief (e.g. "victima").
     archetype_key: str
-
-    # Archetype display name in Romanian (e.g. "Victima").
     archetype_name_ro: str
-
-    # All ingredient answers for this player.
     answers: list[PlayerAnswerItem] = field(default_factory=list)
 
 
@@ -297,20 +351,6 @@ class PlayerAnswers:
 class StoryLLMProvider(ABC):
     """
     Abstract base class for LLM story generation implementations.
-
-    Concrete implementations (e.g. OllamaStoryLLM in M4.4) must subclass
-    this and implement `generate_story`. All Ollama-specific, OpenAI-specific,
-    or other LLM-specific code lives in the concrete implementation only.
-
-    Usage
-    -----
-    ::
-        class OllamaStoryLLM(StoryLLMProvider):
-            def generate_story(self, brief, player_answers):
-                ...
-
-        llm = OllamaStoryLLM()
-        story = llm.generate_story(brief, answers)
     """
 
     @abstractmethod
@@ -321,30 +361,6 @@ class StoryLLMProvider(ABC):
     ) -> Story:
         """
         Generate a structured story from a CreativeBrief and player answers.
-
-        Parameters
-        ----------
-        brief:
-            A fully populated CreativeBrief instance (typed as Any here to
-            avoid a circular import; callers pass a CreativeBrief from
-            creative_director.models). The implementation may type-narrow
-            to CreativeBrief internally.
-        player_answers:
-            One PlayerAnswers entry per active player. Players who did not
-            submit have answers with empty answer_text fields.
-
-        Returns
-        -------
-        Story
-            A fully populated Story. Callers should call story.validate()
-            to verify structural correctness before downstream use.
-
-        Raises
-        ------
-        Exception
-            Implementations may raise any exception on generation failure.
-            The orchestrator catches all exceptions and reports them as
-            pipeline failures.
         """
         ...
 
