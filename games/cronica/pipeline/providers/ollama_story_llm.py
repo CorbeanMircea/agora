@@ -328,9 +328,11 @@ def _build_user_prompt(
             "",
         ]
 
+    names_str = ", ".join(player_names) if player_names else "(niciun jucător)"
     lines += [
         f"Scrie o poveste comică de bandă desenată cu exact {panel_count} panouri.",
-        f"Jucători care TREBUIE să apară în text: {', '.join(player_names)}.",
+        f"OBLIGATORIU: Numele acestor jucători trebuie să apară explicit în text: {names_str}.",
+        "Fiecare ingredient trebuie integrat organic conform rolului său — nu ca umplutură.",
         "",
         "Răspunde EXCLUSIV cu un obiect JSON cu această structură exactă:",
         "",
@@ -364,6 +366,13 @@ def _build_json_schema_example(panel_count: int) -> str:
     }
     return json.dumps(schema, ensure_ascii=False, indent=2)
 
+def _extract_ingredients_from_system_prompt(system_prompt: str) -> list[str]:
+    """
+    Extract ingredient answer texts from a system prompt for test verification.
+    Returns list of answer_text values found between «» markers.
+    """
+    import re
+    return re.findall(r"«([^»]+)»", system_prompt)
 
 # ── Response parser ───────────────────────────────────────────────────────────
 
@@ -434,12 +443,13 @@ def _dict_to_story(data: dict[str, Any], panel_count: int) -> Story:
     """
     Convert a parsed JSON dict to a Story dataclass.
     Raises ValueError on missing required fields.
+    narrator_script and image_prompts are reconstructed from panels if absent
+    (LLMs sometimes omit the convenience lists when the data is in panels).
     """
-    required = ["title", "panels", "narrator_script", "image_prompts"]
-    missing = [f for f in required if f not in data]
+    required_core = ["title", "panels"]
+    missing = [f for f in required_core if f not in data]
     if missing:
         raise ValueError(f"LLM response missing required Story fields: {missing}")
-
     raw_panels: list[dict[str, Any]] = data["panels"]
     panels: list[PanelDescription] = []
 
