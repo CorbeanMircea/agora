@@ -193,7 +193,7 @@
   **Dependencies:** M4.2, M4.3.
   **Completion criteria:** Calls Ollama REST API at `localhost:11434`; uses Llama 3.1 8B model; sends system prompt encoding the CreativeBrief and anti-template instructions; requests structured JSON output conforming to the Story schema; retries once on malformed JSON before raising; logs token usage; VRAM usage stays under 6GB during LLM step; generation completes in under 30 seconds.
 
-- [ ] M4.5 Story System Prompt Engineering
+- [x] M4.5 Story System Prompt Engineering
   **Objective:** Write and validate the LLM system prompt that produces original stories using player ingredients as narrative fuel, with each ingredient assigned a structural role by the Creative Director.
   **Dependencies:** M4.4.
   **Completion criteria:** System prompt receives each ingredient paired with its assigned role (e.g. "crocodil = numele organizației secrete"); prompt instructs LLM to integrate ingredients organically — never decoratively; story must be impossible to reverse-engineer from ingredients alone; prompt encodes the full CreativeBrief (genre, archetypes, structure, tone); tested across all 7 genres; produces structurally different stories from identical ingredient sets across multiple runs.
@@ -460,9 +460,9 @@
 ## Current Status
 
 **Current Milestone:** M4 — Story Generation
-**Current Task:** M4.5 Story System Prompt Engineering
-**Next Task:** M4.6 Post-Generation Validation
-**Overall Progress:** 31 / 48 tasks complete
+**Current Task:** M4.6 Post-Generation Validation
+**Next Task:** M4.7 Story Generation Integration Test
+**Overall Progress:** 32 / 48 tasks complete
 ---
 
 ## Development Rules
