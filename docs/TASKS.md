@@ -203,7 +203,7 @@
   **Dependencies:** M4.5.
   **Completion criteria:** Validates: all player names appear in the story; all image prompts are non-empty English strings; panel count matches the brief's specified panel count; narrator script has one line per panel; no panel description is shorter than 20 words; on validation failure, one retry is attempted with the error included in the prompt; after two failures, a fallback minimal story is generated rather than crashing the round.
 
-- [ ] M4.7 Story Generation Integration Test
+- [X] M4.7 Story Generation Integration Test
   **Objective:** Write an integration test that calls the full story generation pipeline with a sample CreativeBrief and real player answers and validates the output.
   **Dependencies:** M4.6.
   **Completion criteria:** Test calls `OllamaStoryLLM.generate_story()` with a fixture CreativeBrief and 4-player answer set; validates all Story schema fields are populated; validates player names appear in output; validates image prompts are English; test runs against a live Ollama instance; documented setup instructions explain how to install Ollama and pull Llama 3.1 8B; test passes consistently across 3 runs.
@@ -459,10 +459,10 @@
 
 ## Current Status
 
-**Current Milestone:** M4 — Story Generation
-**Current Task:** M4.7 Story Generation Integration Test
-**Next Task:** M5.1 ImageGeneratorProvider Interface
-**Overall Progress:** 33 / 48 tasks complete
+**Current Milestone:** M5 — Image Pipeline
+**Current Task:** M5.1 ImageGeneratorProvider Interface
+**Next Task:** M5.2 Character Description System
+**Overall Progress:** 34 / 48 tasks complete
 ---
 
 ## Development Rules
