@@ -16,6 +16,12 @@ from .image_generator_provider import (
     PanelImage,
     ImageGenerationError,
 )
+from .character_description import (
+    CharacterSheet,
+    CharacterRoster,
+    CharacterDescriptionGenerator,
+    MAX_CHARACTERS_PER_PANEL,
+)
 
 __all__ = [
     "StoryLLMProvider",
@@ -29,4 +35,8 @@ __all__ = [
     "VisualStyle",
     "PanelImage",
     "ImageGenerationError",
+    "CharacterSheet",
+    "CharacterRoster",
+    "CharacterDescriptionGenerator",
+    "MAX_CHARACTERS_PER_PANEL",
 ]

@@ -219,7 +219,7 @@
   **Dependencies:** M4.1.
   **Completion criteria:** Abstract base class with method: `generate_panel(prompt: ImagePrompt, style: VisualStyle, characterDescriptions: CharacterSheet[]) -> PanelImage`; `ImagePrompt` dataclass defined; `VisualStyle` dataclass defined (maps from CreativeBrief visual fields); `PanelImage` dataclass wraps the output file path and metadata; no ComfyUI-specific code in the interface.
 
-- [ ] M5.2 Character Description System
+- [x] M5.2 Character Description System
   **Objective:** Implement the character description generator that creates consistent visual descriptions for each player-character at the start of image generation.
   **Dependencies:** M5.1, M3.5.
   **Completion criteria:** Each player-character gets a `CharacterSheet`: name, hair colour/style, clothing dominant colour (unique per character), one distinguishing feature; colour assignments are unique within a round (no two characters share a dominant clothing colour); character sheets are derived from player names and archetype (not randomly); sheets are written to `brief.json` alongside the CreativeBrief; same character sheet is injected into every panel prompt featuring that character.
@@ -460,9 +460,9 @@
 ## Current Status
 
 **Current Milestone:** M5 — Image Pipeline
-**Current Task:** M5.2 Character Description System
-**Next Task:** M5.3 ComfyUI Workflow Integration
-**Overall Progress:** 35 / 48 tasks complete
+**Current Task:** M5.3 ComfyUI Workflow Integration
+**Next Task:** M5.4 Style Token Injection
+**Overall Progress:** 36 / 48 tasks complete
 ---
 
 ## Development Rules
