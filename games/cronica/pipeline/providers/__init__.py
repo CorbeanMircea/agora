@@ -22,6 +22,7 @@ from .character_description import (
     CharacterDescriptionGenerator,
     MAX_CHARACTERS_PER_PANEL,
 )
+from .flux_image_generator import FluxImageGenerator
 
 __all__ = [
     "StoryLLMProvider",
@@ -39,4 +40,5 @@ __all__ = [
     "CharacterRoster",
     "CharacterDescriptionGenerator",
     "MAX_CHARACTERS_PER_PANEL",
+    "FluxImageGenerator",
 ]

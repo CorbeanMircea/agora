@@ -224,7 +224,7 @@
   **Dependencies:** M5.1, M3.5.
   **Completion criteria:** Each player-character gets a `CharacterSheet`: name, hair colour/style, clothing dominant colour (unique per character), one distinguishing feature; colour assignments are unique within a round (no two characters share a dominant clothing colour); character sheets are derived from player names and archetype (not randomly); sheets are written to `brief.json` alongside the CreativeBrief; same character sheet is injected into every panel prompt featuring that character.
 
-- [ ] M5.3 ComfyUI Workflow Integration
+- [x] M5.3 ComfyUI Workflow Integration
   **Objective:** Implement `FluxImageGenerator`, the concrete `ImageGeneratorProvider` that submits generation jobs to ComfyUI's API using FLUX.1 schnell.
   **Dependencies:** M5.1, M5.2.
   **Completion criteria:** Calls ComfyUI REST API at `localhost:8188`; uses FLUX.1 schnell model; workflow accepts positive prompt, negative prompt, style tokens, resolution (1024×1024 default); polls for job completion; saves output PNG to the round output directory; VRAM usage stays under 12GB; generation completes in under 20 seconds per panel on RTX 4070; VRAM is cleared after all panels are generated.
@@ -460,9 +460,9 @@
 ## Current Status
 
 **Current Milestone:** M5 — Image Pipeline
-**Current Task:** M5.3 ComfyUI Workflow Integration
-**Next Task:** M5.4 Style Token Injection
-**Overall Progress:** 36 / 48 tasks complete
+**Current Task:** M5.4 Style Token Injection
+**Next Task:** M5.5 Panel Composition Orchestrator
+**Overall Progress:** 37 / 48 tasks complete
 ---
 
 ## Development Rules
