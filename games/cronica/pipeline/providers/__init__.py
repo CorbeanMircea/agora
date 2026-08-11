@@ -9,6 +9,13 @@ from .story_llm_provider import (
     PlayerAnswerItem,
 )
 from .ollama_story_llm import OllamaStoryLLM
+from .image_generator_provider import (
+    ImageGeneratorProvider,
+    ImagePrompt,
+    VisualStyle,
+    PanelImage,
+    ImageGenerationError,
+)
 
 __all__ = [
     "StoryLLMProvider",
@@ -17,4 +24,9 @@ __all__ = [
     "PlayerAnswers",
     "PlayerAnswerItem",
     "OllamaStoryLLM",
+    "ImageGeneratorProvider",
+    "ImagePrompt",
+    "VisualStyle",
+    "PanelImage",
+    "ImageGenerationError",
 ]

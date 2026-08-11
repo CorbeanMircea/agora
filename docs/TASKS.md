@@ -214,7 +214,7 @@
 
 > Goal: ComfyUI + FLUX.1 schnell is integrated. Given a Story's image prompts and the CreativeBrief's visual style, 4–8 comic panels are generated and saved as PNG files.
 
-- [ ] M5.1 ImageGeneratorProvider Interface
+- [x] M5.1 ImageGeneratorProvider Interface
   **Objective:** Define the abstract `ImageGeneratorProvider` Python interface that all image generation implementations must satisfy.
   **Dependencies:** M4.1.
   **Completion criteria:** Abstract base class with method: `generate_panel(prompt: ImagePrompt, style: VisualStyle, characterDescriptions: CharacterSheet[]) -> PanelImage`; `ImagePrompt` dataclass defined; `VisualStyle` dataclass defined (maps from CreativeBrief visual fields); `PanelImage` dataclass wraps the output file path and metadata; no ComfyUI-specific code in the interface.
@@ -460,9 +460,9 @@
 ## Current Status
 
 **Current Milestone:** M5 — Image Pipeline
-**Current Task:** M5.1 ImageGeneratorProvider Interface
-**Next Task:** M5.2 Character Description System
-**Overall Progress:** 34 / 48 tasks complete
+**Current Task:** M5.2 Character Description System
+**Next Task:** M5.3 ComfyUI Workflow Integration
+**Overall Progress:** 35 / 48 tasks complete
 ---
 
 ## Development Rules
