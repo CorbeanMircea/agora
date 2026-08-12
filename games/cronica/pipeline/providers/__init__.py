@@ -24,6 +24,11 @@ from .character_description import (
 )
 from .flux_image_generator import FluxImageGenerator
 from .style_token_injector import StyleTokenInjector
+from .panel_composition_orchestrator import (
+    PanelCompositionOrchestrator,
+    PanelResult,
+    CompositionResult,
+)
 
 __all__ = [
     "StoryLLMProvider",
@@ -43,4 +48,7 @@ __all__ = [
     "MAX_CHARACTERS_PER_PANEL",
     "FluxImageGenerator",
     "StyleTokenInjector",
+    "PanelCompositionOrchestrator",
+    "PanelResult",
+    "CompositionResult",
 ]

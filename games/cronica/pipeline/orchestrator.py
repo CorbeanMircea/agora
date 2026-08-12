@@ -567,16 +567,86 @@ async def _step_image_generation(
     output_dir: Path,
 ) -> None:
     """
-    M5.3 — ComfyUI FLUX.1 image generation.
-    Placeholder: writes stub panel_N.png marker files.
+    M5.5 — Panel Composition Orchestrator.
+
+    Runs the full panel generation loop:
+      - Builds CharacterRoster (M5.2)
+      - Builds per-panel ImagePrompts via StyleTokenInjector (M5.4)
+      - Generates each panel via FluxImageGenerator (M5.3) sequentially
+      - Retries each panel once on failure; writes a stub on repeated failure
+      - Saves panel_1.png … panel_N.png and character_sheets.json
+
+    If ComfyUI / FluxImageGenerator is unavailable, falls back to writing
+    stub PNG marker files so the pipeline does not crash.
     """
-    panel_count: int = brief.get("panel_count", 5)
-    log.info("[Step 3] Image Generation — %d panels", panel_count)
+    panel_count: int = int(brief.get("panel_count", 5))
+    log.info("[Step 3] Panel Composition — %d panels", panel_count)
+
+    try:
+        from .providers.panel_composition_orchestrator import PanelCompositionOrchestrator
+        from .providers.story_llm_provider import Story
+
+        # Reconstruct Story object from the dict produced by Step 2.
+        story_obj: Any = None
+        if not story.get("_stub"):
+            try:
+                story_obj = Story.from_dict(story)
+            except Exception as exc:
+                log.warning(
+                    "[Step 3] Could not reconstruct Story from dict: %s — "
+                    "using stub panels",
+                    exc,
+                )
+
+        if story_obj is None:
+            # Story is a stub or unparseable — write placeholder PNGs
+            _write_stub_panels(output_dir, panel_count)
+            return
+
+        # Reconstruct CreativeBrief if available; otherwise pass the dict
+        # directly (PanelCompositionOrchestrator uses getattr with defaults).
+        brief_obj: Any = brief
+        if not brief.get("_stub"):
+            try:
+                from .creative_director.models import CreativeBrief
+                brief_obj = CreativeBrief.from_dict(brief)
+            except Exception as exc:
+                log.warning(
+                    "[Step 3] Could not reconstruct CreativeBrief: %s — "
+                    "using dict fallback",
+                    exc,
+                )
+                brief_obj = brief
+
+        orchestrator = PanelCompositionOrchestrator()
+        result = orchestrator.generate_all_panels(
+            brief=brief_obj,
+            story=story_obj,
+            output_dir=output_dir,
+        )
+
+        log.info(
+            "[Step 3] Panel composition done — %d ok, %d fallback, %.1fs",
+            result.success_count,
+            result.fallback_count,
+            result.total_seconds,
+        )
+
+    except ImportError as exc:
+        log.warning(
+            "[Step 3] PanelCompositionOrchestrator not available (%s) — "
+            "writing stub panels",
+            exc,
+        )
+        _write_stub_panels(output_dir, panel_count)
+
+
+def _write_stub_panels(output_dir: Path, panel_count: int) -> None:
+    """Write minimal stub PNG marker files when image generation is unavailable."""
     for i in range(panel_count):
-        # Write a 1-byte marker so downstream checks can verify files exist.
-        stub_png = output_dir / f"panel_{i + 1}.png"
-        if not stub_png.exists():
-            stub_png.write_bytes(b"\x89PNG_STUB")
+        stub = output_dir / f"panel_{i + 1}.png"
+        if not stub.exists():
+            stub.write_bytes(b"\x89PNG_STUB")
     log.info("[Step 3] %d stub panels written", panel_count)
 
 

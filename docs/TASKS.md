@@ -234,7 +234,7 @@
   **Dependencies:** M5.3, M3.2.
   **Completion criteria:** Each genre's visual style maps to a set of positive style tokens (e.g. "oversaturated, warm tones, telenovela aesthetic, dramatic close-up"); each genre has a negative token list (e.g. horror genre excludes "bright, cheerful"); camera language per panel is translated to composition tokens (e.g. "panel 1: wide establishing shot, low angle" → `wide shot, low angle, establishing`); tokens are constructed deterministically from the CreativeBrief; no hard-coded prompt strings outside the style injection module.
 
-- [ ] M5.5 Panel Composition Orchestrator
+- [x] M5.5 Panel Composition Orchestrator
   **Objective:** Implement the loop that generates all panels sequentially, injecting per-panel camera rules, character descriptions, and dialogue cues.
   **Dependencies:** M5.4.
   **Completion criteria:** Generates panels in order (panel 1 first, panel N last); each panel prompt combines: base style tokens + camera rule for that panel + character descriptions for characters in that panel + scene description from Story; dialogue/speech bubble text is passed as a caption note (not embedded in the image); panels are saved as `panel_1.png` … `panel_N.png`; total generation time for 6 panels logged; partial failure (one panel fails) retries that panel once before writing a placeholder.
@@ -460,9 +460,9 @@
 ## Current Status
 
 **Current Milestone:** M5 — Image Pipeline
-**Current Task:** M5.5 Panel Composition Orchestrator
-**Next Task:** M5.6 Image Pipeline Integration Test
-**Overall Progress:** 38 / 48 tasks complete
+**Current Task:** M5.6 Image Pipeline Integration Test
+**Next Task:** M6.1 TTSProvider Interface
+**Overall Progress:** 39 / 48 tasks complete
 ---
 
 ## Development Rules
