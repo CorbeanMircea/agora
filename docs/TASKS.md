@@ -229,7 +229,7 @@
   **Dependencies:** M5.1, M5.2.
   **Completion criteria:** Calls ComfyUI REST API at `localhost:8188`; uses FLUX.1 schnell model; workflow accepts positive prompt, negative prompt, style tokens, resolution (1024×1024 default); polls for job completion; saves output PNG to the round output directory; VRAM usage stays under 12GB; generation completes in under 20 seconds per panel on RTX 4070; VRAM is cleared after all panels are generated.
 
-- [ ] M5.4 Style Token Injection
+- [x] M5.4 Style Token Injection
   **Objective:** Implement the system that translates each genre's visual style and camera language rules into ComfyUI prompt tokens for each panel.
   **Dependencies:** M5.3, M3.2.
   **Completion criteria:** Each genre's visual style maps to a set of positive style tokens (e.g. "oversaturated, warm tones, telenovela aesthetic, dramatic close-up"); each genre has a negative token list (e.g. horror genre excludes "bright, cheerful"); camera language per panel is translated to composition tokens (e.g. "panel 1: wide establishing shot, low angle" → `wide shot, low angle, establishing`); tokens are constructed deterministically from the CreativeBrief; no hard-coded prompt strings outside the style injection module.
@@ -460,9 +460,9 @@
 ## Current Status
 
 **Current Milestone:** M5 — Image Pipeline
-**Current Task:** M5.4 Style Token Injection
-**Next Task:** M5.5 Panel Composition Orchestrator
-**Overall Progress:** 37 / 48 tasks complete
+**Current Task:** M5.5 Panel Composition Orchestrator
+**Next Task:** M5.6 Image Pipeline Integration Test
+**Overall Progress:** 38 / 48 tasks complete
 ---
 
 ## Development Rules
