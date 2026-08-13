@@ -239,7 +239,7 @@
   **Dependencies:** M5.4.
   **Completion criteria:** Generates panels in order (panel 1 first, panel N last); each panel prompt combines: base style tokens + camera rule for that panel + character descriptions for characters in that panel + scene description from Story; dialogue/speech bubble text is passed as a caption note (not embedded in the image); panels are saved as `panel_1.png` … `panel_N.png`; total generation time for 6 panels logged; partial failure (one panel fails) retries that panel once before writing a placeholder.
 
-- [ ] M5.6 Image Pipeline Integration Test
+- [x] M5.6 Image Pipeline Integration Test
   **Objective:** Write an integration test that runs the full image pipeline from a Story fixture through to PNG files on disk.
   **Dependencies:** M5.5.
   **Completion criteria:** Test uses a fixture Story and CreativeBrief; calls `FluxImageGenerator` for all panels; validates output files exist and are valid PNGs; validates file sizes are non-trivial (>50KB each); validates panel count matches brief; test is documented with ComfyUI and FLUX.1 schnell setup instructions; test passes on RTX 4070 in under 3 minutes total.
@@ -459,10 +459,10 @@
 
 ## Current Status
 
-**Current Milestone:** M5 — Image Pipeline
-**Current Task:** M5.6 Image Pipeline Integration Test
-**Next Task:** M6.1 TTSProvider Interface
-**Overall Progress:** 39 / 48 tasks complete
+**Current Milestone:** M6 — TTS Pipeline
+**Current Task:** M6.1 TTSProvider Interface
+**Next Task:** M6.2 ElevenLabs TTS Implementation
+**Overall Progress:** 40 / 48 tasks complete
 ---
 
 ## Development Rules
