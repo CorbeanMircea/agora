@@ -194,7 +194,7 @@ class TestBuildFluxWorkflow:
             width=1024, height=1024, steps=4, cfg=1.0,
             sampler="euler", scheduler="simple",
         )
-        # CLIP text encode nodes use DualCLIPLoader output
+        # CLIP text encode nodes use CLIPLoader output
         assert wf["4"]["inputs"]["clip"] == ["2", 0]
         assert wf["5"]["inputs"]["clip"] == ["2", 0]
         # KSampler references

@@ -365,22 +365,27 @@ def _build_flux_workflow(
     scheduler: str,
 ) -> dict[str, Any]:
     """
-    Build a ComfyUI API workflow JSON for FLUX.1 schnell.
+    Build a ComfyUI API workflow JSON for the configured diffusion model.
 
-    Node graph (separate loaders — required for FLUX.1 schnell):
-      1  UNETLoader         → loads flux1-schnell.safetensors (diffusion model only)
-      2  CLIPLoader         → loads t5xxl_fp16.safetensors + clip_l.safetensors
-      3  VAELoader          → loads ae.safetensors
+    Default: z_image_turbo (nvfp4) with Qwen 3 4B text encoder and ae VAE.
+    Override via environment variables:
+      COMFYUI_CHECKPOINT  — filename in models/diffusion_models/
+      COMFYUI_CLIP_NAME1  — filename in models/text_encoders/ or models/clip/
+      COMFYUI_VAE_NAME    — filename in models/vae/
+
+    Node graph:
+      1  UNETLoader         → diffusion model
+      2  CLIPLoader         → single text encoder (Qwen)
+      3  VAELoader          → VAE
       4  CLIPTextEncode     → positive prompt
       5  CLIPTextEncode     → negative prompt
-      6  EmptyLatentImage   → sets resolution
-      7  KSampler           → runs diffusion
-      8  VAEDecode          → decodes latent to pixel space
-      9  SaveImage          → writes PNG to ComfyUI output dir
+      6  EmptyLatentImage   → resolution
+      7  KSampler           → diffusion
+      8  VAEDecode          → latent to pixels
+      9  SaveImage          → PNG output
     """
-    checkpoint_name = os.getenv("COMFYUI_CHECKPOINT", "flux1-schnell.safetensors")
-    clip_name1 = os.getenv("COMFYUI_CLIP_NAME1", "t5xxl_fp16.safetensors")
-    clip_name2 = os.getenv("COMFYUI_CLIP_NAME2", "clip_l.safetensors")
+    checkpoint_name = os.getenv("COMFYUI_CHECKPOINT", "z_image_turbo_nvfp4.safetensors")
+    clip_name1 = os.getenv("COMFYUI_CLIP_NAME1", "qwen_3_4b_fp8_mixed.safetensors")
     vae_name = os.getenv("COMFYUI_VAE_NAME", "ae.safetensors")
     output_prefix = f"agora_panel_{uuid.uuid4().hex[:8]}"
 
@@ -393,11 +398,10 @@ def _build_flux_workflow(
             },
         },
         "2": {
-            "class_type": "DualCLIPLoader",
+            "class_type": "CLIPLoader",
             "inputs": {
-                "clip_name1": clip_name1,
-                "clip_name2": clip_name2,
-                "type": "flux",
+                "clip_name": clip_name1,
+                "type": "wan",
                 "device": "default",
             },
         },
