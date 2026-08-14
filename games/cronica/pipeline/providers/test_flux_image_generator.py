@@ -122,13 +122,15 @@ class TestBuildFluxWorkflow:
             sampler="euler",
             scheduler="simple",
         )
-        assert "1" in wf  # CheckpointLoaderSimple
-        assert "2" in wf  # CLIPTextEncode positive
-        assert "3" in wf  # CLIPTextEncode negative
-        assert "4" in wf  # EmptyLatentImage
-        assert "5" in wf  # KSampler
-        assert "6" in wf  # VAEDecode
-        assert "7" in wf  # SaveImage
+        assert "1" in wf  # UNETLoader
+        assert "2" in wf  # DualCLIPLoader
+        assert "3" in wf  # VAELoader
+        assert "4" in wf  # CLIPTextEncode positive
+        assert "5" in wf  # CLIPTextEncode negative
+        assert "6" in wf  # EmptyLatentImage
+        assert "7" in wf  # KSampler
+        assert "8" in wf  # VAEDecode
+        assert "9" in wf  # SaveImage
 
     def test_workflow_positive_prompt_set(self):
         wf = _build_flux_workflow(
@@ -137,7 +139,7 @@ class TestBuildFluxWorkflow:
             width=1024, height=1024, steps=4, cfg=1.0,
             sampler="euler", scheduler="simple",
         )
-        assert wf["2"]["inputs"]["text"] == "cinematic wide shot"
+        assert wf["4"]["inputs"]["text"] == "cinematic wide shot"
 
     def test_workflow_negative_prompt_set(self):
         wf = _build_flux_workflow(
@@ -146,7 +148,7 @@ class TestBuildFluxWorkflow:
             width=1024, height=1024, steps=4, cfg=1.0,
             sampler="euler", scheduler="simple",
         )
-        assert wf["3"]["inputs"]["text"] == "horror, dark"
+        assert wf["5"]["inputs"]["text"] == "horror, dark"
 
     def test_workflow_resolution_set(self):
         wf = _build_flux_workflow(
@@ -155,8 +157,8 @@ class TestBuildFluxWorkflow:
             width=768, height=512, steps=4, cfg=1.0,
             sampler="euler", scheduler="simple",
         )
-        assert wf["4"]["inputs"]["width"] == 768
-        assert wf["4"]["inputs"]["height"] == 512
+        assert wf["6"]["inputs"]["width"] == 768
+        assert wf["6"]["inputs"]["height"] == 512
 
     def test_workflow_steps_set(self):
         wf = _build_flux_workflow(
@@ -165,7 +167,7 @@ class TestBuildFluxWorkflow:
             width=1024, height=1024, steps=8, cfg=1.0,
             sampler="euler", scheduler="simple",
         )
-        assert wf["5"]["inputs"]["steps"] == 8
+        assert wf["7"]["inputs"]["steps"] == 8
 
     def test_workflow_cfg_set(self):
         wf = _build_flux_workflow(
@@ -174,7 +176,7 @@ class TestBuildFluxWorkflow:
             width=1024, height=1024, steps=4, cfg=2.0,
             sampler="euler", scheduler="simple",
         )
-        assert wf["5"]["inputs"]["cfg"] == 2.0
+        assert wf["7"]["inputs"]["cfg"] == 2.0
 
     def test_workflow_sampler_set(self):
         wf = _build_flux_workflow(
@@ -183,8 +185,8 @@ class TestBuildFluxWorkflow:
             width=1024, height=1024, steps=4, cfg=1.0,
             sampler="dpm_2", scheduler="karras",
         )
-        assert wf["5"]["inputs"]["sampler_name"] == "dpm_2"
-        assert wf["5"]["inputs"]["scheduler"] == "karras"
+        assert wf["7"]["inputs"]["sampler_name"] == "dpm_2"
+        assert wf["7"]["inputs"]["scheduler"] == "karras"
 
     def test_workflow_node_references_correct(self):
         wf = _build_flux_workflow(
@@ -192,13 +194,19 @@ class TestBuildFluxWorkflow:
             width=1024, height=1024, steps=4, cfg=1.0,
             sampler="euler", scheduler="simple",
         )
-        assert wf["5"]["inputs"]["model"] == ["1", 0]
-        assert wf["5"]["inputs"]["positive"] == ["2", 0]
-        assert wf["5"]["inputs"]["negative"] == ["3", 0]
-        assert wf["5"]["inputs"]["latent_image"] == ["4", 0]
-        assert wf["6"]["inputs"]["samples"] == ["5", 0]
-        assert wf["6"]["inputs"]["vae"] == ["1", 2]
-        assert wf["7"]["inputs"]["images"] == ["6", 0]
+        # CLIP text encode nodes use DualCLIPLoader output
+        assert wf["4"]["inputs"]["clip"] == ["2", 0]
+        assert wf["5"]["inputs"]["clip"] == ["2", 0]
+        # KSampler references
+        assert wf["7"]["inputs"]["model"] == ["1", 0]
+        assert wf["7"]["inputs"]["positive"] == ["4", 0]
+        assert wf["7"]["inputs"]["negative"] == ["5", 0]
+        assert wf["7"]["inputs"]["latent_image"] == ["6", 0]
+        # VAEDecode
+        assert wf["8"]["inputs"]["samples"] == ["7", 0]
+        assert wf["8"]["inputs"]["vae"] == ["3", 0]
+        # SaveImage
+        assert wf["9"]["inputs"]["images"] == ["8", 0]
 
     def test_workflow_is_json_serialisable(self):
         wf = _build_flux_workflow(
@@ -220,8 +228,8 @@ class TestBuildFluxWorkflow:
             width=1024, height=1024, steps=4, cfg=1.0,
             sampler="euler", scheduler="simple",
         )
-        prefix_a = wf_a["7"]["inputs"]["filename_prefix"]
-        prefix_b = wf_b["7"]["inputs"]["filename_prefix"]
+        prefix_a = wf_a["9"]["inputs"]["filename_prefix"]
+        prefix_b = wf_b["9"]["inputs"]["filename_prefix"]
         assert prefix_a != prefix_b
 
 

@@ -367,40 +367,61 @@ def _build_flux_workflow(
     """
     Build a ComfyUI API workflow JSON for FLUX.1 schnell.
 
-    Node graph:
-      1  CheckpointLoaderSimple  → loads flux1-schnell.safetensors
-      2  CLIPTextEncode          → positive prompt
-      3  CLIPTextEncode          → negative prompt
-      4  EmptyLatentImage        → sets resolution
-      5  KSampler                → runs diffusion
-      6  VAEDecode               → decodes latent to pixel space
-      7  SaveImage               → writes PNG to ComfyUI output dir
+    Node graph (separate loaders — required for FLUX.1 schnell):
+      1  UNETLoader         → loads flux1-schnell.safetensors (diffusion model only)
+      2  CLIPLoader         → loads t5xxl_fp16.safetensors + clip_l.safetensors
+      3  VAELoader          → loads ae.safetensors
+      4  CLIPTextEncode     → positive prompt
+      5  CLIPTextEncode     → negative prompt
+      6  EmptyLatentImage   → sets resolution
+      7  KSampler           → runs diffusion
+      8  VAEDecode          → decodes latent to pixel space
+      9  SaveImage          → writes PNG to ComfyUI output dir
     """
     checkpoint_name = os.getenv("COMFYUI_CHECKPOINT", "flux1-schnell.safetensors")
+    clip_name1 = os.getenv("COMFYUI_CLIP_NAME1", "t5xxl_fp16.safetensors")
+    clip_name2 = os.getenv("COMFYUI_CLIP_NAME2", "clip_l.safetensors")
+    vae_name = os.getenv("COMFYUI_VAE_NAME", "ae.safetensors")
     output_prefix = f"agora_panel_{uuid.uuid4().hex[:8]}"
 
     workflow: dict[str, Any] = {
         "1": {
-            "class_type": "CheckpointLoaderSimple",
+            "class_type": "UNETLoader",
             "inputs": {
-                "ckpt_name": checkpoint_name,
+                "unet_name": checkpoint_name,
+                "weight_dtype": "default",
             },
         },
         "2": {
-            "class_type": "CLIPTextEncode",
+            "class_type": "DualCLIPLoader",
             "inputs": {
-                "clip": ["1", 1],
-                "text": positive_prompt,
+                "clip_name1": clip_name1,
+                "clip_name2": clip_name2,
+                "type": "flux",
+                "device": "default",
             },
         },
         "3": {
-            "class_type": "CLIPTextEncode",
+            "class_type": "VAELoader",
             "inputs": {
-                "clip": ["1", 1],
-                "text": negative_prompt or "",
+                "vae_name": vae_name,
             },
         },
         "4": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "clip": ["2", 0],
+                "text": positive_prompt,
+            },
+        },
+        "5": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "clip": ["2", 0],
+                "text": negative_prompt or "",
+            },
+        },
+        "6": {
             "class_type": "EmptyLatentImage",
             "inputs": {
                 "batch_size": 1,
@@ -408,33 +429,33 @@ def _build_flux_workflow(
                 "width": width,
             },
         },
-        "5": {
+        "7": {
             "class_type": "KSampler",
             "inputs": {
                 "cfg": cfg,
                 "denoise": 1.0,
-                "latent_image": ["4", 0],
+                "latent_image": ["6", 0],
                 "model": ["1", 0],
-                "negative": ["3", 0],
-                "positive": ["2", 0],
+                "negative": ["5", 0],
+                "positive": ["4", 0],
                 "sampler_name": sampler,
                 "scheduler": scheduler,
                 "seed": _generate_seed(),
                 "steps": steps,
             },
         },
-        "6": {
+        "8": {
             "class_type": "VAEDecode",
             "inputs": {
-                "samples": ["5", 0],
-                "vae": ["1", 2],
+                "samples": ["7", 0],
+                "vae": ["3", 0],
             },
         },
-        "7": {
+        "9": {
             "class_type": "SaveImage",
             "inputs": {
                 "filename_prefix": output_prefix,
-                "images": ["6", 0],
+                "images": ["8", 0],
             },
         },
     }
@@ -451,13 +472,7 @@ def _generate_seed() -> int:
 def _extract_output_filename(outputs: dict[str, Any]) -> str | None:
     """
     Extract the output image filename from a ComfyUI job's outputs dict.
-
-    ComfyUI output structure:
-    {
-        "7": {
-            "images": [{"filename": "agora_panel_abc_00001_.png", ...}]
-        }
-    }
+    Checks all output nodes for image results (node ID may vary).
     """
     for node_output in outputs.values():
         images = node_output.get("images", [])
