@@ -221,16 +221,35 @@ def _build_system_prompt(brief: Any, player_answers: list[PlayerAnswers]) -> str
         getattr(narrator, "personality_description_ro", "") if narrator else ""
     )
 
-    # Archetypes → player mapping
+    # Archetypes → player mapping with visual descriptions for image prompts
     archetypes = list(getattr(brief, "archetypes", []))
     archetype_lines: list[str] = []
+
+    # Build character visual descriptions so the LLM can include them in image_prompt_en
+    try:
+        from .character_description import CharacterDescriptionGenerator
+        roster = CharacterDescriptionGenerator().generate(brief)
+    except Exception:
+        roster = None
+
     for arch in archetypes:
         key = getattr(arch, "key", "?")
         name_ro = getattr(arch, "name_ro", key)
         desc_ro = getattr(arch, "description_ro", "")
         nickname = getattr(arch, "player_nickname", "?")
+
+        # Add visual description for image prompt generation
+        visual = ""
+        if roster is not None:
+            sheet = roster.get_by_archetype_key(key)
+            if sheet is not None:
+                visual = (
+                    f" | VISUAL for image prompts: {sheet.hair_description}, "
+                    f"{sheet.clothing_colour_verbose} clothing, {sheet.distinguishing_feature}"
+                )
+
         archetype_lines.append(
-            f"  - {nickname} joacă rolul «{name_ro}» ({key}): {desc_ro}"
+            f"  - {nickname} joacă rolul «{name_ro}» ({key}): {desc_ro}{visual}"
         )
 
     # Player ingredients with assigned roles
@@ -285,6 +304,12 @@ def _build_system_prompt(brief: Any, player_answers: list[PlayerAnswers]) -> str
             "ghicit doar din lista de ingrediente. Ingredientul servește povestea.",
             "",
             ingredients_block,
+            "",
+            "INGREDIENT VISUAL RULE pentru image_prompt_en:",
+            "- Ingredientele cu rol LOCATION trebuie să apară ca loc/decor în prompt-ul de imagine al panoului relevant.",
+            "- Ingredientele cu rol OBJECT/CHARACTER/NAME trebuie să apară fizic vizibil în prompt-ul panoului relevant.",
+            "- Ingredientele cu rol ATMOSPHERE/CONCEPT trebuie să influențeze tonul vizual (lighting, mood, color).",
+            "- Dacă un obiect este folosit activ într-o scenă, descrie explicit interacțiunea vizuală.",
         ]
 
     if narrator_desc:
@@ -296,12 +321,38 @@ def _build_system_prompt(brief: Any, player_answers: list[PlayerAnswers]) -> str
     parts += [
         "",
         "REGULI DE SCRIERE:",
-        "1. Scrie în română. Prompturile de imagine (image_prompt_en) OBLIGATORIU în engleză.",
-        "2. Fiecare description_ro trebuie să aibă minimum 20 de cuvinte.",
-        "3. Fiecare narrator_line_ro trebuie să sune ca vocea naratorului descris mai sus.",
-        "4. Toate numele jucătorilor trebuie să apară în text (în description_ro sau dialogue_ro).",
-        "5. image_prompt_en: doar caractere ASCII, în engleză, stil ComfyUI (tokens separate prin virgulă).",
+        "1. Scrie în română pentru toate câmpurile EXCEPT image_prompt_en.",
+        "2. image_prompt_en: MUST BE IN ENGLISH ONLY. ONLY ASCII CHARACTERS (a-z, A-Z, 0-9, punctuation).",
+        "   NO Romanian letters. NO diacritics (a, a, i, s, t with accents are FORBIDDEN).",
+        "3. Fiecare description_ro trebuie să aibă minimum 20 de cuvinte.",
+        "4. Fiecare narrator_line_ro trebuie să sune ca vocea naratorului descris mai sus.",
+        "5. Toate numele jucătorilor trebuie să apară în text (în description_ro sau dialogue_ro).",
         "6. Răspunde EXCLUSIV cu un obiect JSON valid. Fără text înaintea sau după JSON.",
+        "7. NU genera câmpurile narrator_script și image_prompts la nivel de root — acestea sunt INTERZISE.",
+        "   Generează DOAR câmpul panels[] cu toate sub-câmpurile.",
+        "",
+        "REGULI SPECIALE PENTRU image_prompt_en:",
+        "image_prompt_en must be a detailed English prose sentence describing exactly what is VISUALLY happening",
+        "in that panel. It is NOT a list of keywords. It IS a visual scene description for an image generator.",
+        "",
+        "For each panel, image_prompt_en MUST describe:",
+        "- The specific action happening (not generic 'two characters talking')",
+        "- Which characters are present, with their visual appearance (hair, clothing, accessories)",
+        "- Which important objects/ingredients are visible and how they relate to the scene",
+        "- The specific location/environment",
+        "- Camera framing (wide shot, medium shot, close-up, etc.)",
+        "- Lighting mood",
+        "- Visual style consistent with the genre",
+        "- End with: No text, no captions, no subtitles, no speech bubbles, no labels, no logos.",
+        "",
+        "INGREDIENT VISUAL RULE: If an ingredient (object, location, animal) is central to the action",
+        "of a panel, it MUST appear explicitly in image_prompt_en with its visual role described.",
+        "Example: if the story says a crocodile holds an umbrella, write:",
+        "  'a large crocodile on a riverbank holding a black umbrella with its jaw, ...'",
+        "Do NOT write: 'wide shot, animal, umbrella'",
+        "",
+        "IMPORTANT: Do NOT include any text, words, signs, subtitles, captions or written content",
+        "in the image. The presentation layer handles all text separately.",
     ]
 
     return "\n".join(parts)
@@ -334,7 +385,15 @@ def _build_user_prompt(
         f"OBLIGATORIU: Numele acestor jucători trebuie să apară explicit în text: {names_str}.",
         "Fiecare ingredient trebuie integrat organic conform rolului său — nu ca umplutură.",
         "",
-        "Răspunde EXCLUSIV cu un obiect JSON cu această structură exactă:",
+        "CRITICAL RULES FOR image_prompt_en:",
+        "1. ENGLISH ONLY. ASCII ONLY. No Romanian. No diacritics.",
+        "2. Write a PROSE SENTENCE describing the SPECIFIC VISUAL SCENE, not generic keywords.",
+        "3. Describe characters by appearance (clothing color, hair, accessories).",
+        "4. If an ingredient/object is central to this panel's action, describe it explicitly.",
+        "5. Include location, camera framing, lighting, visual style.",
+        "6. End every image_prompt_en with: No text, no captions, no subtitles, no speech bubbles, no labels, no logos.",
+        "",
+        "Răspunde EXCLUSIV cu un obiect JSON cu această structură exactă (FĂRĂ narrator_script și image_prompts la root):",
         "",
         schema_example,
     ]
@@ -349,20 +408,34 @@ def _build_json_schema_example(panel_count: int) -> str:
     """
     panels = []
     for i in range(panel_count):
+        if i == 0:
+            example_prompt = (
+                "Wide shot, documentary style. A woman in vibrant red clothing with a long red scarf "
+                "holds a microphone toward a man in deep blue clothing with thick-rimmed glasses, "
+                "both standing on the muddy bank of a river. Behind them a large crocodile is partially "
+                "visible in the water. Overcast natural lighting, serious investigative mood. "
+                "No text, no captions, no subtitles, no speech bubbles, no labels, no logos."
+            )
+        else:
+            example_prompt = (
+                f"[Panel {i}: English prose description of the specific visual scene. "
+                f"Describe characters by appearance (clothing color, hair, accessories), "
+                f"the specific action, important objects and their role, location/environment, "
+                f"camera framing, lighting, visual style. "
+                f"End with: No text, no captions, no subtitles, no speech bubbles, no labels, no logos.]"
+            )
         panels.append({
             "panel_index": i,
-            "description_ro": f"[Descriere scenă panou {i}, minimum 20 cuvinte, română]",
-            "dialogue_ro": f"[Dialog sau caption panou {i}, sau șir gol dacă nu e dialog]",
-            "image_prompt_en": f"[English ComfyUI tokens for panel {i}, ASCII only]",
-            "narrator_line_ro": f"[Linia naratorului pentru panou {i}, în română]",
-            "characters_in_panel": ["[archetype_key1]"],
+            "description_ro": f"[Descriere scenă panou {i}, minimum 20 cuvinte, ROMÂNĂ]",
+            "dialogue_ro": f"[Dialog panou {i} în română, sau șir gol dacă nu e dialog]",
+            "image_prompt_en": example_prompt,
+            "narrator_line_ro": f"[Linia naratorului panou {i}, în ROMÂNĂ]",
+            "characters_in_panel": ["[archetype_key1]", "[archetype_key2]"],
         })
 
     schema: dict[str, Any] = {
         "title": "[Titlul poveștii în română]",
         "panels": panels,
-        "narrator_script": [f"[Linia naratorului panou {i}]" for i in range(panel_count)],
-        "image_prompts": [f"[English prompt panou {i}]" for i in range(panel_count)],
     }
     return json.dumps(schema, ensure_ascii=False, indent=2)
 
@@ -463,14 +536,11 @@ def _dict_to_story(data: dict[str, Any], panel_count: int) -> Story:
             characters_in_panel=list(p.get("characters_in_panel", [])),
         ))
 
-    narrator_script: list[str] = [str(x) for x in data.get("narrator_script", [])]
-    image_prompts: list[str] = [str(x) for x in data.get("image_prompts", [])]
-
-    # If narrator_script / image_prompts are missing, reconstruct from panels
-    if not narrator_script and panels:
-        narrator_script = [p.narrator_line_ro for p in panels]
-    if not image_prompts and panels:
-        image_prompts = [p.image_prompt_en for p in panels]
+    # Always reconstruct narrator_script and image_prompts from panels.
+    # This guarantees they match panels[x] exactly, satisfying Story.validate().
+    # The LLM is no longer asked to generate these as separate root fields.
+    narrator_script = [p.narrator_line_ro for p in panels]
+    image_prompts = [p.image_prompt_en for p in panels]
 
     return Story(
         title=str(data.get("title", "")),

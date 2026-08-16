@@ -44,6 +44,22 @@ ingredient can fulfill completely different roles across playthroughs:
 
 Ingredients adapt to the story. The story does not adapt to the ingredients.
 
+## Visual Propagation of Ingredients
+
+Ingredients with role LOCATION must appear as environment/setting in image_prompt_en
+for panels where that location is relevant.
+
+Ingredients with role OBJECT, CHARACTER, or NAME must appear visibly in image_prompt_en
+for panels where those elements are physically present or actively used.
+
+Ingredients with role ATMOSPHERE or CONCEPT influence the lighting, color, and mood
+of image_prompt_en rather than appearing as discrete objects.
+
+The LLM (OllamaStoryLLM) is responsible for propagating ingredient visual presence
+into image_prompt_en. The system prompt explicitly instructs ingredient-to-visual mapping.
+The CharacterDescriptionGenerator provides character visual attributes to the LLM
+system prompt so character appearance remains consistent across panel image prompts.
+
 ## Impact on existing tasks
 
 | Task | Change |

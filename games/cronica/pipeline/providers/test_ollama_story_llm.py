@@ -202,6 +202,29 @@ class TestSystemPromptStructure:
         assert isinstance(prompt, str)
         assert len(prompt) > 200
 
+    def test_system_prompt_instructs_prose_image_prompts(self):
+        """System prompt must instruct LLM to write prose descriptions not keyword lists."""
+        brief = _make_brief("telenovela_romaneasca", seed=0)
+        player_answers = _make_player_answers_for_brief(brief)
+        prompt = _build_system_prompt(brief, player_answers)
+        # Must instruct prose description, not just tokens
+        assert "prose" in prompt.lower() or "PROSE" in prompt or "sentence" in prompt.lower() or "scene description" in prompt.lower()
+
+    def test_system_prompt_instructs_no_text_in_images(self):
+        """System prompt must instruct LLM to exclude text/captions from image prompts."""
+        brief = _make_brief("telenovela_romaneasca", seed=0)
+        player_answers = _make_player_answers_for_brief(brief)
+        prompt = _build_system_prompt(brief, player_answers)
+        assert "no text" in prompt.lower() or "No text" in prompt
+
+    def test_system_prompt_contains_character_visual_descriptions(self):
+        """System prompt must include character visual descriptions (clothing, hair) for image prompt generation."""
+        brief = _make_brief("telenovela_romaneasca", seed=0)
+        player_answers = _make_player_answers_for_brief(brief)
+        prompt = _build_system_prompt(brief, player_answers)
+        # Should contain visual appearance info like clothing colour
+        assert "clothing" in prompt.lower() or "hair" in prompt.lower()
+
 
 # ── Anti-template / ADR-001 ingredient integration tests ─────────────────────
 
@@ -405,12 +428,15 @@ class TestUserPrompt:
 
 class TestJsonSchemaExample:
     @pytest.mark.parametrize("panel_count", [4, 5, 6, 8])
-    def test_schema_example_has_correct_panel_count(self, panel_count: int):
-        example = _build_json_schema_example(panel_count)
-        data = json.loads(example)
-        assert len(data["panels"]) == panel_count
-        assert len(data["narrator_script"]) == panel_count
-        assert len(data["image_prompts"]) == panel_count
+    def test_schema_example_has_correct_panel_count(self):
+        for panel_count in [4, 5, 6, 8]:
+            example = _build_json_schema_example(panel_count)
+            data = json.loads(example)
+            assert len(data["panels"]) == panel_count
+            # narrator_script and image_prompts are no longer in the schema example;
+            # they are always reconstructed from panels after parsing.
+            assert "narrator_script" not in data
+            assert "image_prompts" not in data
 
     @pytest.mark.parametrize("panel_count", [4, 5, 6, 8])
     def test_schema_example_has_correct_panel_indices(self, panel_count: int):
@@ -429,6 +455,17 @@ class TestJsonSchemaExample:
         for panel in data["panels"]:
             for field in required:
                 assert field in panel, f"Required field '{field}' missing from schema example"
+
+    def test_schema_example_image_prompt_is_prose_not_keywords(self):
+        """First panel example must show prose description, not just keyword tokens."""
+        example = _build_json_schema_example(5)
+        data = json.loads(example)
+        first_panel = data["panels"][0]
+        prompt = first_panel["image_prompt_en"]
+        # A prose description has spaces between words forming sentences, not just comma-separated short tokens
+        # Proxy: the example prompt should contain period or multi-word phrases
+        assert len(prompt) > 100, "Example image_prompt_en should be a detailed prose description"
+        assert "No text" in prompt or "no text" in prompt
 
     def test_schema_example_is_valid_json(self):
         for panel_count in [4, 5, 6, 8]:

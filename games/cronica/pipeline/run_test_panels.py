@@ -24,16 +24,16 @@ player_answers_raw = [
         player_id="p1",
         nickname="Ana",
         answers=[
-            {"prompt_id": "p0", "category": "CONCRET",  "answer_text": "crocodil"},
-            {"prompt_id": "p1", "category": "LOC",      "answer_text": "Buzău"},
+            {"prompt_id": "p0", "category": "CONCRET",  "answer_text": "zebră"},
+            {"prompt_id": "p1", "category": "LOC",      "answer_text": "Paris"},
         ],
     ),
     PlayerAnswer(
         player_id="p2",
         nickname="Bogdan",
         answers=[
-            {"prompt_id": "p2", "category": "CONCRET",  "answer_text": "umbrelă"},
-            {"prompt_id": "p3", "category": "ABSTRACT", "answer_text": "bucurie"},
+            {"prompt_id": "p2", "category": "CONCRET",  "answer_text": "tort de ciocolată"},
+            {"prompt_id": "p3", "category": "ABSTRACT", "answer_text": "anxietate"},
         ],
     ),
 ]
