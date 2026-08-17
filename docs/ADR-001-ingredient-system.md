@@ -60,6 +60,41 @@ into image_prompt_en. The system prompt explicitly instructs ingredient-to-visua
 The CharacterDescriptionGenerator provides character visual attributes to the LLM
 system prompt so character appearance remains consistent across panel image prompts.
 
+## Archetype Visual Contract
+
+Archetypes are NARRATIVE ROLES, not visual descriptions.
+
+An archetype key (e.g. `scepticul`, `expertul`) is a database identifier used in
+`characters_in_panel` to look up the character sheet. It must never appear as a
+character name or label in `image_prompt_en`.
+
+Visual identity of a character comes exclusively from the character sheet:
+- `hair_description`
+- `clothing_colour_verbose`
+- `distinguishing_feature`
+
+The archetype ROLE may be expressed in `image_prompt_en` only as visible behavior:
+- `expertul` → confident posture, pointing at evidence, gesturing with authority
+- `scepticul` → arms crossed, furrowed brow, skeptical expression, leaning back
+
+The character sheet attributes are injected into the LLM system prompt by
+`_build_system_prompt` under a `VISUAL IDENTITY` label, separate from the
+`NARRATIVE ROLE` label, to prevent conflation.
+
+## Ingredient Visual Contract
+
+Every concrete ingredient appearing in `description_ro` or `narrator_line_ro`
+of a panel MUST appear explicitly in `image_prompt_en` of the same panel.
+
+Ingredient presence in narration or dialogue is NOT sufficient — if an ingredient
+is not in `image_prompt_en`, it will not appear in the generated image.
+
+Visual translation by ingredient role:
+- `LOCATION` → must appear as visible environment/background
+- `OBJECT` → must be explicitly named and its use/position described
+- `ATMOSPHERE`/`CONCEPT` → translated to visible behavior, expression, lighting, color
+- `CHARACTER`/`NAME` → must appear with character-sheet visual attributes
+
 ## Impact on existing tasks
 
 | Task | Change |

@@ -58,11 +58,8 @@ _GENERATION_TIMEOUT_SECS: float = float(os.getenv("COMFYUI_TIMEOUT_SECS", "120")
 _DEFAULT_WIDTH: int = 1024
 _DEFAULT_HEIGHT: int = 1024
 
-# FLUX.1 schnell is a distilled model optimised for 4 steps
-_DEFAULT_STEPS: int = 4
-
-# CFG 1.0 — guidance is distilled into FLUX.1 schnell weights
-_DEFAULT_CFG: float = 1.0
+_DEFAULT_CFG: float = 1.0   # FLUX.1 schnell works best at low CFG
+_DEFAULT_STEPS: int = 4     # schnell is a 4-step model
 
 _DEFAULT_SAMPLER: str = "euler"
 _DEFAULT_SCHEDULER: str = "simple"
@@ -365,27 +362,37 @@ def _build_flux_workflow(
     scheduler: str,
 ) -> dict[str, Any]:
     """
-    Build a ComfyUI API workflow JSON for the configured diffusion model.
+    Build a ComfyUI API workflow JSON for FLUX.1 schnell.
 
-    Default: z_image_turbo (nvfp4) with Qwen 3 4B text encoder and ae VAE.
+    Model files required (already on disk):
+      models/checkpoints/flux1-schnell.safetensors
+      models/clip/t5xxl_fp16.safetensors
+      models/clip/clip_l.safetensors
+      models/vae/ae.safetensors
+
     Override via environment variables:
-      COMFYUI_CHECKPOINT  — filename in models/diffusion_models/
-      COMFYUI_CLIP_NAME1  — filename in models/text_encoders/ or models/clip/
-      COMFYUI_VAE_NAME    — filename in models/vae/
+      COMFYUI_CHECKPOINT  — filename in models/checkpoints/
+      COMFYUI_CLIP_NAME1  — T5 encoder filename in models/clip/ or models/text_encoders/
+      COMFYUI_CLIP_NAME2  — CLIP-L filename in models/clip/ or models/text_encoders/
+      COMFYUI_VAE_NAME    — VAE filename in models/vae/
 
     Node graph:
-      1  UNETLoader         → diffusion model
-      2  CLIPLoader         → single text encoder (Qwen)
-      3  VAELoader          → VAE
-      4  CLIPTextEncode     → positive prompt
-      5  CLIPTextEncode     → negative prompt
-      6  EmptyLatentImage   → resolution
-      7  KSampler           → diffusion
-      8  VAEDecode          → latent to pixels
-      9  SaveImage          → PNG output
+      1  CheckpointLoaderSimple → loads flux1-schnell (unet + clip bundled)
+         -- FLUX.1 schnell is distributed as a single checkpoint file --
+      OR if using split files:
+      1  UNETLoader       → diffusion model
+      2  DualCLIPLoader   → t5xxl + clip_l
+      3  VAELoader        → ae.safetensors
+      4  CLIPTextEncode   → positive prompt
+      5  CLIPTextEncode   → negative prompt
+      6  EmptyLatentImage → resolution
+      7  KSampler         → diffusion
+      8  VAEDecode        → latent to pixels
+      9  SaveImage        → PNG output
     """
-    checkpoint_name = os.getenv("COMFYUI_CHECKPOINT", "z_image_turbo_nvfp4.safetensors")
-    clip_name1 = os.getenv("COMFYUI_CLIP_NAME1", "qwen_3_4b_fp8_mixed.safetensors")
+    checkpoint_name = os.getenv("COMFYUI_CHECKPOINT", "flux1-schnell.safetensors")
+    clip_name1 = os.getenv("COMFYUI_CLIP_NAME1", "t5xxl_fp16.safetensors")
+    clip_name2 = os.getenv("COMFYUI_CLIP_NAME2", "clip_l.safetensors")
     vae_name = os.getenv("COMFYUI_VAE_NAME", "ae.safetensors")
     output_prefix = f"agora_panel_{uuid.uuid4().hex[:8]}"
 
@@ -398,10 +405,11 @@ def _build_flux_workflow(
             },
         },
         "2": {
-            "class_type": "CLIPLoader",
+            "class_type": "DualCLIPLoader",
             "inputs": {
-                "clip_name": clip_name1,
-                "type": "wan",
+                "clip_name1": clip_name1,
+                "clip_name2": clip_name2,
+                "type": "flux",
                 "device": "default",
             },
         },

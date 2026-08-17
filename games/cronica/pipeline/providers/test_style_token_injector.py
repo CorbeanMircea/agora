@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
+from typer import style
 
 from .style_token_injector import StyleTokenInjector, _merge_tokens
 from .image_generator_provider import ImagePrompt, VisualStyle
@@ -221,7 +222,54 @@ class TestBuildVisualStyle:
         brief = cd.generate(players, [], seed=0)
         style = injector.build_visual_style(brief)
         lower_neg = [t.lower() for t in style.style_tokens_negative]
-        assert "photorealistic" in lower_neg, "photorealistic must be in negative tokens"            
+        assert "photorealistic" in lower_neg, "photorealistic must be in negative tokens" 
+
+    def test_negative_tokens_include_speech_bubble_prohibitions(self):
+        """Negative tokens must prevent text/speech bubbles in generated images."""
+        cd = CreativeDirector()
+        players = [_make_player("p1", "Ana"), _make_player("p2", "Bogdan")]
+        injector = StyleTokenInjector()
+        brief = cd.generate(players, [], seed=0)
+        style = injector.build_visual_style(brief)
+        lower_neg = [t.lower() for t in style.style_tokens_negative]
+        required = ["speech bubble", "text", "caption", "typography"]
+        for req in required:
+            assert req in lower_neg, f"'{req}' must be in negative tokens to prevent rendered text"
+
+    def test_negative_tokens_include_no_text_in_every_genre(self):
+        """Every genre must prohibit text rendering via negative tokens."""
+        cd = CreativeDirector()
+        players = [_make_player("p1", "Ana"), _make_player("p2", "Bogdan")]
+        injector = StyleTokenInjector()
+        for seed in range(20):
+            brief = cd.generate(players, [], seed=seed)
+            style = injector.build_visual_style(brief)
+            lower_neg = [t.lower() for t in style.style_tokens_negative]
+            assert "text" in lower_neg, f"'text' missing from negative tokens for genre '{brief.genre_key}' (seed {seed})"
+
+    def test_comic_book_tokens_not_in_positive(self):
+        """Comic book tokens must not appear in positive style — they trigger speech bubbles."""
+        cd = CreativeDirector()
+        players = [_make_player("p1", "Ana"), _make_player("p2", "Bogdan")]
+        injector = StyleTokenInjector()
+        brief = cd.generate(players, [], seed=0)
+        style = injector.build_visual_style(brief)
+        lower_pos = [t.lower() for t in style.style_tokens_positive]
+        forbidden = ["comic book", "graphic novel", "comic artwork", "ink line work", "linework", "sequential art"]
+        for f in forbidden:
+            assert f not in lower_pos, f"'{f}' must not be in positive tokens — triggers speech bubbles"
+
+    def test_comic_book_tokens_in_negative(self):
+        """Comic book tokens must be in negative style to prevent speech bubble generation."""
+        cd = CreativeDirector()
+        players = [_make_player("p1", "Ana"), _make_player("p2", "Bogdan")]
+        injector = StyleTokenInjector()
+        brief = cd.generate(players, [], seed=0)
+        style = injector.build_visual_style(brief)
+        lower_neg = [t.lower() for t in style.style_tokens_negative]
+        required = ["comic book", "graphic novel", "speech bubble"]
+        for req in required:
+            assert req in lower_neg, f"'{req}' must be in negative tokens"           
 
 # ── build_image_prompts tests ─────────────────────────────────────────────────
 

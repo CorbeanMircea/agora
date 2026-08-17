@@ -249,7 +249,13 @@ def _build_system_prompt(brief: Any, player_answers: list[PlayerAnswers]) -> str
                 )
 
         archetype_lines.append(
-            f"  - {nickname} joacă rolul «{name_ro}» ({key}): {desc_ro}{visual}"
+            f"  CHARACTER: {nickname}\n"
+            f"    Story role: {name_ro} — {desc_ro}\n"
+            f"    Visual appearance (use ONLY these in image_prompt_en): "
+            f"{visual.strip(' |').strip() if visual else 'no visual data available'}\n"
+            f"    Panel tag (use in characters_in_panel JSON field, nowhere else): \"{key}\"\n"
+            f"    RULE: Never write '{name_ro}' or '{key}' in image_prompt_en. "
+            f"    Use '{nickname}' and the visual appearance above instead."
         )
 
     # Player ingredients with assigned roles
@@ -351,9 +357,62 @@ def _build_system_prompt(brief: Any, player_answers: list[PlayerAnswers]) -> str
         "  'a large crocodile on a riverbank holding a black umbrella with its jaw, ...'",
         "Do NOT write: 'wide shot, animal, umbrella'",
         "",
-        "IMPORTANT: Do NOT include any text, words, signs, subtitles, captions or written content",
-        "in the image. The presentation layer handles all text separately.",
+        "CRITICAL TEXT RULE: image_prompt_en must end with this exact sentence on every panel:",
+        "'No text, no captions, no subtitles, no speech bubbles, no dialogue bubbles,",
+        " no written dialogue, no labels, no character names, no logos, no typography.'",
+        "Do NOT include archetype role names (like 'Scepticul', 'Expertul') anywhere in image_prompt_en.",
+        "Do NOT include player nicknames as text labels in image_prompt_en.",
+        "Character identity comes from their physical description only.",
+        "",
+        "ARCHETYPE RULE: Archetype names (Expertul, Scepticul, Victima, etc.) are NARRATIVE ROLES,",
+        "NOT visual descriptions and NOT character names.",
+        "NEVER write 'an expert-looking man' or 'the skeptic' or 'Scepticul' in image_prompt_en.",
+        "Instead:",
+        "- Use the player's nickname and VISUAL IDENTITY attributes (hair, clothing) to identify them.",
+        "- Translate the archetype into VISIBLE BEHAVIOR/POSTURE only if relevant to the scene:",
+        "  Expertul → 'pointing confidently at evidence, gesturing with authority'",
+        "  Scepticul → 'arms crossed, furrowed brow, skeptical expression, leaning back'",
+        "  Victima → 'hunched posture, wide eyes, hands raised defensively'",
+        "- The archetype key goes in characters_in_panel ONLY, never in the visual description prose.",
+        "characters_in_panel: list the archetype KEYS (e.g. 'scepticul', 'expertul') of characters",
+        "physically present in this panel. These keys are database identifiers ONLY.",
+        "Do NOT use these keys as character names in image_prompt_en.",
+        "Use the player nickname and visual description instead.",
+        "DIALOGUE RULE: dialogue_ro content must NEVER appear in image_prompt_en.",
+        "Dialogue is rendered by the presentation layer, not in the image.",
+        "Do not translate, paraphrase, or reference dialogue_ro in image_prompt_en.",
+        "",
+        "MANDATORY VISUAL CHECK — apply before writing each image_prompt_en:",
+        "1. Read the description_ro for this panel.",
+        "2. List every ingredient from the ingredients list that appears in description_ro.",
+        "3. For each such ingredient: write it explicitly into image_prompt_en.",
+        "4. If an ingredient is assigned OBJECT role and appears ANYWHERE in the story",
+        "   (even just mentioned), it must be VISIBLE in at least ONE panel's image_prompt_en.",
+        "   Choose the panel where it appears most naturally and make it explicitly visible there.",
+        "5. Never omit an OBJECT ingredient from all panels — even if it feels absurd,",
+        "   include it. The absurdity is intentional and is the game's core mechanic.",
+        "6. For ANIMAL ingredients: describe the animal in foreground, not background.",
+        "   Do not write 'a zebra visible in the background' — write",
+        "   'a zebra standing on the pavement directly in front of the characters,",
+        "   black and white stripes clearly visible, looking directly at the camera'.",
+        "   Foreground placement forces the model to render the animal correctly.",
+        "7. Be hyper-specific about the animal's visual features.",
+        "   'zebra' alone is insufficient — write 'black-and-white striped zebra,",
+        "   horse-like body, distinctive black and white pattern, standing still'.",
     ]
+
+     # Explicitly list which words must never appear in image_prompt_en
+    forbidden_role_names = [
+        f"'{getattr(arch, 'name_ro', '')}' or '{getattr(arch, 'key', '')}'"
+        for arch in archetypes
+    ]
+    if forbidden_role_names:
+        parts += [
+            "",
+            f"FORBIDDEN WORDS IN image_prompt_en: {', '.join(forbidden_role_names)}.",
+            "These are narrative role names. They must NEVER appear in image_prompt_en.",
+            "Use character nicknames and visual appearance descriptions instead.",
+        ]
 
     return "\n".join(parts)
 
@@ -430,7 +489,7 @@ def _build_json_schema_example(panel_count: int) -> str:
             "dialogue_ro": f"[Dialog panou {i} în română, sau șir gol dacă nu e dialog]",
             "image_prompt_en": example_prompt,
             "narrator_line_ro": f"[Linia naratorului panou {i}, în ROMÂNĂ]",
-            "characters_in_panel": ["[archetype_key1]", "[archetype_key2]"],
+            "characters_in_panel": ["[nickname_of_player_1]", "[nickname_of_player_2]"],
         })
 
     schema: dict[str, Any] = {

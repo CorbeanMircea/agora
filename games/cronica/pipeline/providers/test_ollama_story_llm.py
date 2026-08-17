@@ -20,6 +20,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from typer import prompt
 
 from .ollama_story_llm import (
     OllamaStoryLLM,
@@ -252,6 +253,56 @@ class TestSystemPromptStructure:
         player_answers = _make_player_answers_for_brief(brief)
         prompt = _build_system_prompt(brief, player_answers)
         assert "LOCATION" in prompt and "OBJECT" in prompt
+
+    def test_system_prompt_prohibits_archetype_names_in_image_prompts(self):
+        """System prompt must explicitly state archetype names must not appear in image_prompt_en."""
+        brief = _make_brief("documentar_fals", seed=0)
+        player_answers = _make_player_answers_for_brief(brief)
+        prompt = _build_system_prompt(brief, player_answers)
+        # Must explicitly separate archetype role from visual description
+        assert "NARRATIVE ROLE" in prompt or "narrative role" in prompt.lower()
+        assert "NOT" in prompt  # must say role names must NOT appear in visual descriptions
+
+    def test_system_prompt_separates_visual_identity_from_role(self):
+        """Archetype section must label visual identity separately from narrative role."""
+        brief = _make_brief("documentar_fals", seed=0)
+        player_answers = _make_player_answers_for_brief(brief)
+        prompt = _build_system_prompt(brief, player_answers)
+        assert "VISUAL IDENTITY" in prompt
+
+    def test_system_prompt_ingredient_audit_instruction(self):
+        """System prompt must instruct per-panel ingredient audit before writing image_prompt_en."""
+        brief = _make_brief("documentar_fals", seed=0)
+        player_answers = _make_player_answers_for_brief(brief)
+        prompt = _build_system_prompt(brief, player_answers)
+        # Must instruct checking description_ro before writing image_prompt_en
+        assert "description_ro" in prompt and (
+            "ingredient" in prompt.lower() or "INGREDIENT" in prompt
+        )
+
+    def test_system_prompt_prohibits_text_in_images(self):
+        """System prompt must prohibit speech bubbles in image_prompt_en."""
+        brief = _make_brief("documentar_fals", seed=0)
+        player_answers = _make_player_answers_for_brief(brief)
+        prompt = _build_system_prompt(brief, player_answers)
+        assert "speech bubble" in prompt.lower() or "speech bubbles" in prompt.lower()
+
+    def test_system_prompt_explicitly_forbids_role_names_in_image_prompt(self):
+        """System prompt must list forbidden role names for image_prompt_en."""
+        brief = _make_brief("documentar_fals", seed=0)
+        player_answers = _make_player_answers_for_brief(brief)
+        prompt = _build_system_prompt(brief, player_answers)
+        assert "FORBIDDEN" in prompt or "forbidden" in prompt.lower()
+        assert "image_prompt_en" in prompt
+
+    def test_system_prompt_forbids_dialogue_in_image_prompt(self):
+        """System prompt must prohibit dialogue_ro content from appearing in image_prompt_en."""
+        brief = _make_brief("documentar_fals", seed=0)
+        player_answers = _make_player_answers_for_brief(brief)
+        prompt = _build_system_prompt(brief, player_answers)
+        assert "dialogue_ro" in prompt and (
+            "NEVER" in prompt or "never" in prompt.lower()
+        )
 
 
 # ── Anti-template / ADR-001 ingredient integration tests ─────────────────────

@@ -113,24 +113,20 @@ def _setup_http_mocks(
 class TestBuildFluxWorkflow:
     def test_workflow_has_required_nodes(self):
         wf = _build_flux_workflow(
-            positive_prompt="test prompt",
-            negative_prompt="",
-            width=1024,
-            height=1024,
-            steps=4,
-            cfg=1.0,
-            sampler="euler",
-            scheduler="simple",
-        )
-        assert "1" in wf  # UNETLoader
-        assert "2" in wf  # DualCLIPLoader
-        assert "3" in wf  # VAELoader
-        assert "4" in wf  # CLIPTextEncode positive
-        assert "5" in wf  # CLIPTextEncode negative
-        assert "6" in wf  # EmptyLatentImage
-        assert "7" in wf  # KSampler
-        assert "8" in wf  # VAEDecode
-        assert "9" in wf  # SaveImage
+            positive_prompt="test prompt", negative_prompt="",
+            width=1024, height=1024, steps=4, cfg=1.0,
+            sampler="euler", scheduler="simple",
+        )   
+        assert "1" in wf   # UNETLoader
+        assert "2" in wf   # DualCLIPLoader
+        assert "3" in wf   # VAELoader
+        assert "4" in wf   # CLIPTextEncode positive
+        assert "5" in wf   # CLIPTextEncode negative
+        assert "6" in wf   # EmptyLatentImage
+        assert "7" in wf   # KSampler
+        assert "8" in wf   # VAEDecode
+        assert "9" in wf   # SaveImage
+        assert "10" not in wf  # ModelSamplingAuraFlow no longer used
 
     def test_workflow_positive_prompt_set(self):
         wf = _build_flux_workflow(
@@ -194,10 +190,10 @@ class TestBuildFluxWorkflow:
             width=1024, height=1024, steps=4, cfg=1.0,
             sampler="euler", scheduler="simple",
         )
-        # CLIP text encode nodes use CLIPLoader output
+        # DualCLIPLoader feeds both text encoders
         assert wf["4"]["inputs"]["clip"] == ["2", 0]
         assert wf["5"]["inputs"]["clip"] == ["2", 0]
-        # KSampler references
+        # KSampler uses UNETLoader directly (no ModelSamplingAuraFlow wrapper)
         assert wf["7"]["inputs"]["model"] == ["1", 0]
         assert wf["7"]["inputs"]["positive"] == ["4", 0]
         assert wf["7"]["inputs"]["negative"] == ["5", 0]

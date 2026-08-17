@@ -51,18 +51,19 @@ class ImagePrompt:
     character_descriptions: list[str] = field(default_factory=list)
 
     def build_positive_prompt(self) -> str:
-        """
-        Assemble the final positive prompt string for ComfyUI.
-        Combines base_prompt, camera_tokens, character_descriptions, and style_tokens_positive.
-        """
-        parts: list[str] = []
-        if self.base_prompt.strip():
-            parts.append(self.base_prompt.strip())
-        if self.camera_tokens.strip():
-            parts.append(self.camera_tokens.strip())
-        parts.extend(d.strip() for d in self.character_descriptions if d.strip())
-        parts.extend(t.strip() for t in self.style_tokens_positive if t.strip())
-        return ", ".join(parts)
+        # Style anchor first — establishes the visual medium before scene content.
+        # Character descriptions second — weighted highly by FLUX.1 schnell.
+        # Scene content and camera last.
+        style = ", ".join(self.style_tokens_positive) if self.style_tokens_positive else ""
+        parts = []
+        if style:
+            parts.append(style)
+        if self.character_descriptions:
+            parts.append(self.character_descriptions)
+        parts.append(self.base_prompt)
+        if self.camera_tokens:
+            parts.append(self.camera_tokens)
+        return ", ".join(filter(None, parts))
 
     def build_negative_prompt(self) -> str:
         """Assemble the final negative prompt string for ComfyUI."""
