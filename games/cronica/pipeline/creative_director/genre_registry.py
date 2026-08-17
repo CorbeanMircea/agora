@@ -550,9 +550,11 @@ DOCUMENTAR_FALS = GenreDefinition(
         _cam(5, "Final interview medium shot",                "medium shot, final statement, interview, documentary ending"),
     ],
     lighting_mood="documentary natural light, slightly underexposed, interview key light only",
-    style_tokens_positive=["documentary aesthetic", "handheld camera", "desaturated", "realistic", "journalistic"],
-    style_tokens_negative=["comic book style", "bright colors", "fantasy", "animated", "flat illustration"],
-
+    style_tokens_positive=["documentary film aesthetic", "handheld camera", "desaturated", 
+                        "realistic", "journalistic", "16mm film grain", "archival footage look",
+                        "observational framing"],
+    style_tokens_negative=["comic book", "animation", "bright saturated", "fantasy", "folk art",
+                        "action movie", "dramatic studio lighting"],
     narrator_personality=_narrator(
         voice_key="ro_documentar_grav",
         personality_ro="Gravitate absolută față de subiecte banale. Pauze semnificative înainte de fraze evidente. Ton de descoperire permanentă.",

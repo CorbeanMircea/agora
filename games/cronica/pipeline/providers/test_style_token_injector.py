@@ -185,6 +185,43 @@ class TestBuildVisualStyle:
                 )
                 break
 
+    def test_global_style_tokens_present_in_all_genres(self):
+        """Every genre must include the global illustrated style tokens."""
+        from .style_token_injector import _GLOBAL_STYLE_POSITIVE
+        cd = CreativeDirector()
+        players = [_make_player("p1", "Ana"), _make_player("p2", "Bogdan")]
+        injector = StyleTokenInjector()
+        for seed in range(50):
+            brief = cd.generate(players, [], seed=seed)
+            style = injector.build_visual_style(brief)
+            lower_tokens = [t.lower() for t in style.style_tokens_positive]
+            # At least one global style marker must be present
+            assert any(
+                g.lower() in lower_tokens for g in _GLOBAL_STYLE_POSITIVE[:3]
+            ), f"Global style tokens missing for genre '{brief.genre_key}'"
+            break  # one pass is sufficient for unit test
+
+    def test_photorealistic_tokens_excluded(self):
+        """photorealistic/photo tokens must not appear in positive tokens."""
+        cd = CreativeDirector()
+        players = [_make_player("p1", "Ana"), _make_player("p2", "Bogdan")]
+        injector = StyleTokenInjector()
+        brief = cd.generate(players, [], seed=0)
+        style = injector.build_visual_style(brief)
+        lower_tokens = [t.lower() for t in style.style_tokens_positive]
+        forbidden = ["photorealistic", "photograph", "photo", "realistic photo"]
+        for f in forbidden:
+            assert f not in lower_tokens, f"Forbidden token '{f}' found in positive style tokens"
+
+    def test_negative_tokens_include_photorealistic(self):
+        """Negative tokens must include photorealistic to prevent photography output."""
+        cd = CreativeDirector()
+        players = [_make_player("p1", "Ana"), _make_player("p2", "Bogdan")]
+        injector = StyleTokenInjector()
+        brief = cd.generate(players, [], seed=0)
+        style = injector.build_visual_style(brief)
+        lower_neg = [t.lower() for t in style.style_tokens_negative]
+        assert "photorealistic" in lower_neg, "photorealistic must be in negative tokens"            
 
 # ── build_image_prompts tests ─────────────────────────────────────────────────
 

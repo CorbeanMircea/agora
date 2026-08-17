@@ -33,6 +33,44 @@ from ..creative_director.genre_registry import get_genre
 from ..creative_director.format_registry import get_format
 from ..creative_director.models import PresentationFormat
 
+# Global game visual style — applied to every panel regardless of genre.
+# This defines the illustrated graphic-novel aesthetic of the game.
+# Genre tokens modify narrative tone; this constant defines the visual medium.
+_GLOBAL_STYLE_POSITIVE: list[str] = [
+    "cinematic graphic novel illustration",
+    "detailed hand-painted comic artwork",
+    "sophisticated European graphic novel aesthetic",
+    "expressive ink line work",
+    "painterly textures",
+    "realistic human proportions",
+    "expressive facial features",
+    "atmospheric environments",
+    "rich muted colors",
+    "dramatic cinematic lighting",
+    "strong visual storytelling",
+    "illustrated documentary style",
+    "clean detailed linework",
+    "high quality digital painting",
+]
+
+_GLOBAL_STYLE_NEGATIVE: list[str] = [
+    "photorealistic",
+    "photograph",
+    "photography",
+    "photo",
+    "realistic photo",
+    "hyperrealistic",
+    "3d render",
+    "CGI",
+    "anime",
+    "manga",
+    "cartoon",
+    "Pixar",
+    "Disney",
+    "flat vector",
+    "low quality",
+    "blurry",
+]
 
 class StyleTokenInjector:
     """
@@ -85,9 +123,16 @@ class StyleTokenInjector:
             except (ValueError, KeyError):
                 pass
 
-        # Merge: genre tokens first, format tokens second (deduplicating)
-        merged_positive = _merge_tokens(genre_positive, format_positive)
-        merged_negative = _merge_tokens(genre_negative, format_negative)
+        # Merge: global game style first, then genre, then format (deduplicating)
+        # Global style defines the visual medium (illustrated); genre/format define the narrative tone.
+        merged_positive = _merge_tokens(
+            _GLOBAL_STYLE_POSITIVE,
+            _merge_tokens(genre_positive, format_positive),
+        )
+        merged_negative = _merge_tokens(
+            _GLOBAL_STYLE_NEGATIVE,
+            _merge_tokens(genre_negative, format_negative),
+        )
 
         return VisualStyle(
             genre_key=genre_key,

@@ -225,6 +225,34 @@ class TestSystemPromptStructure:
         # Should contain visual appearance info like clothing colour
         assert "clothing" in prompt.lower() or "hair" in prompt.lower()
 
+    def test_system_prompt_instructs_prose_image_prompts(self):
+        """System prompt must instruct LLM to write prose descriptions not keyword lists."""
+        brief = _make_brief("telenovela_romaneasca", seed=0)
+        player_answers = _make_player_answers_for_brief(brief)
+        prompt = _build_system_prompt(brief, player_answers)
+        assert "prose" in prompt.lower() or "PROSE" in prompt or "sentence" in prompt.lower() or "scene description" in prompt.lower()
+
+    def test_system_prompt_instructs_no_text_in_images(self):
+        """System prompt must instruct LLM to exclude text/captions from image prompts."""
+        brief = _make_brief("telenovela_romaneasca", seed=0)
+        player_answers = _make_player_answers_for_brief(brief)
+        prompt = _build_system_prompt(brief, player_answers)
+        assert "no text" in prompt.lower() or "No text" in prompt
+
+    def test_system_prompt_contains_character_visual_descriptions(self):
+        """System prompt must include character visual descriptions (clothing, hair)."""
+        brief = _make_brief("telenovela_romaneasca", seed=0)
+        player_answers = _make_player_answers_for_brief(brief)
+        prompt = _build_system_prompt(brief, player_answers)
+        assert "clothing" in prompt.lower() or "hair" in prompt.lower()
+
+    def test_system_prompt_contains_ingredient_visual_rule(self):
+        """System prompt must instruct ingredient visual propagation."""
+        brief = _make_brief("telenovela_romaneasca", seed=0)
+        player_answers = _make_player_answers_for_brief(brief)
+        prompt = _build_system_prompt(brief, player_answers)
+        assert "LOCATION" in prompt and "OBJECT" in prompt
+
 
 # ── Anti-template / ADR-001 ingredient integration tests ─────────────────────
 
@@ -473,6 +501,14 @@ class TestJsonSchemaExample:
             data = json.loads(example)  # must not raise
             assert data
 
+    def test_schema_example_image_prompt_is_prose_not_keywords(self):
+        """First panel example must show prose description, not just keyword tokens."""
+        example = _build_json_schema_example(5)
+        data = json.loads(example)
+        first_panel = data["panels"][0]
+        prompt = first_panel["image_prompt_en"]
+        assert len(prompt) > 100, "Example image_prompt_en should be a detailed prose description"
+        assert "No text" in prompt or "no text" in prompt
 
 # ── Response parser tests ─────────────────────────────────────────────────────
 
