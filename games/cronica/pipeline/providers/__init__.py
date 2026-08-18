@@ -29,6 +29,11 @@ from .panel_composition_orchestrator import (
     PanelResult,
     CompositionResult,
 )
+from .ingredient_enforcer import (
+    IngredientSpec,
+    build_ingredient_specs,
+    enforce_ingredients_in_story,
+)
 
 __all__ = [
     "StoryLLMProvider",
@@ -51,4 +56,7 @@ __all__ = [
     "PanelCompositionOrchestrator",
     "PanelResult",
     "CompositionResult",
+    "IngredientSpec",
+    "build_ingredient_specs",
+    "enforce_ingredients_in_story",
 ]

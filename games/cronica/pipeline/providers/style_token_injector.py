@@ -1,17 +1,18 @@
 """
 M5.4 — Style Token Injection
 
-Translates a CreativeBrief's genre visual style, presentation format,
-and per-panel camera rules into ComfyUI prompt tokens.
+Translates a CreativeBrief's genre visual style and camera rules into
+ComfyUI prompt tokens.
 
-Target visual style: bold Romanian comic book, matching the reference image —
-strong ink outlines, exaggerated expressive characters, vibrant saturated
-colors, dramatic lighting, detailed illustrated environments.
+Target visual style: bold Romanian comic-book illustration matching the
+reference image — strong ink outlines, expressive characters, vibrant
+saturated colors, dramatic lighting.
 
-Text (narration boxes, speech bubbles) is handled by a separate PIL renderer
-in Part B. The image generator produces clean artwork; text is overlaid after.
-Therefore negative tokens do NOT ban speech bubbles from the artwork itself —
-the model should produce comic-style artwork and the text layer is added post.
+Text overlays (narration, dialogue) are added by a separate PIL renderer.
+The image generator produces clean comic artwork. To prevent garbled
+AI-generated text in images, text-rendering tokens are in the NEGATIVE list.
+Comic book STYLE tokens are in the POSITIVE list (they define the art style,
+not text rendering).
 """
 
 from __future__ import annotations
@@ -25,9 +26,8 @@ from ..creative_director.models import PresentationFormat
 
 # ── Global comic-book style anchor ────────────────────────────────────────────
 #
-# These tokens are prepended to EVERY panel prompt regardless of genre.
-# They establish the visual medium: bold Romanian comic-book illustration.
-# Matching the reference image style.
+# These tokens establish the visual medium for EVERY panel.
+# Matches the reference image: bold Romanian comic-book illustration.
 #
 _GLOBAL_STYLE_POSITIVE: list[str] = [
     "highly detailed comic book illustration",
@@ -44,8 +44,10 @@ _GLOBAL_STYLE_POSITIVE: list[str] = [
     "graphic novel illustration",
 ]
 
-# Negative tokens: prevent photorealism and low quality.
-# We do NOT ban speech bubbles here — text overlay handles that in Part B.
+# Negative tokens:
+# - Prevent photorealism
+# - Prevent AI text rendering (garbled speech bubbles, captions)
+#   NOTE: "comic book" stays in POSITIVE (art style). We prevent TEXT, not the art style.
 _GLOBAL_STYLE_NEGATIVE: list[str] = [
     "photorealistic",
     "photograph",
@@ -61,14 +63,35 @@ _GLOBAL_STYLE_NEGATIVE: list[str] = [
     "blurry",
     "watercolor",
     "oil painting",
-    "impressionist",
-    "abstract",
-    "sketch",
-    "pencil drawing",
     "bad anatomy",
     "deformed",
     "ugly",
     "worst quality",
+    # Text rendering prevention — the presentation layer handles all text
+    "text",
+    "caption",
+    "captions",
+    "subtitle",
+    "subtitles",
+    "speech bubble",
+    "speech bubbles",
+    "dialogue bubble",
+    "word balloon",
+    "thought bubble",
+    "written text",
+    "typography",
+    "label",
+    "labels",
+    "watermark",
+    "signature",
+    "title card",
+    "overlay text",
+    "onomatopoeia",
+    "lower third",
+    "chyron",
+    "readable text",
+    "legible text",
+    "written words",
 ]
 
 
@@ -81,7 +104,6 @@ class StyleTokenInjector:
     def build_visual_style(self, brief: Any) -> VisualStyle:
         """
         Build a fully populated VisualStyle from a CreativeBrief.
-
         Merges global comic style + genre-level + format-level tokens.
         """
         genre_key: str = getattr(brief, "genre_key", "")
@@ -161,7 +183,6 @@ class StyleTokenInjector:
 
             camera_tokens: str = camera_token_map.get(i, "")
 
-            # Character descriptions from the roster (plain strings)
             char_descriptions: list[str] = []
             if character_roster is not None and archetype_keys:
                 char_descriptions = character_roster.build_panel_character_descriptions(
@@ -184,9 +205,7 @@ class StyleTokenInjector:
 
 def _merge_tokens(primary: list[str], secondary: list[str]) -> list[str]:
     """
-    Merge two token lists, preserving order and removing duplicates.
-    Primary tokens come first; secondary tokens appended if not already present.
-    Comparison is case-insensitive.
+    Merge two token lists, preserving order and removing case-insensitive duplicates.
     """
     seen: set[str] = set()
     result: list[str] = []
