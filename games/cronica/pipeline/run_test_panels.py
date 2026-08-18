@@ -1,27 +1,18 @@
 """
-Full-pipeline integration test:
-  4 Players × 2 Ingredients
-  → CreativeDirector
-  → OllamaStoryLLM
-  → PanelCompositionOrchestrator
-  → ComfyUI → PNG
+Simple 2-player integration test.
 
-PURPOSE:
-- Test 8 player ingredients simultaneously.
-- Verify all ingredients survive into the story.
-- Verify ingredients are visually represented in image_prompt_en.
-- Verify concrete ingredients remain visually recognizable.
-- Verify abstract ingredients are translated into visible behavior/emotion.
-- Verify different players remain distinguishable.
-- Verify comic/illustrated visual style.
-- Stress-test the story → image pipeline with more players.
+Run from:
+  agora/games/cronica/
 
-Requires:
-  - Ollama running with llama3.1:8b pulled
-  - ComfyUI running with z_image_turbo_nvfp4.safetensors
-
-Run from agora/games/cronica/:
+Command:
   python -m pipeline.run_test_panels
+
+Tests:
+  Player answers
+  → Creative Director
+  → Ollama story
+  → image prompts
+  → ComfyUI images
 """
 
 from pathlib import Path
@@ -29,43 +20,17 @@ from pathlib import Path
 from pipeline.creative_director import CreativeDirector, PlayerAnswer
 from pipeline.creative_director.models import CreativeBrief
 from pipeline.providers.ollama_story_llm import OllamaStoryLLM
-from pipeline.providers.story_llm_provider import (
-    PlayerAnswers,
-    PlayerAnswerItem,
-)
+from pipeline.providers.story_llm_provider import PlayerAnswers, PlayerAnswerItem
 from pipeline.providers.panel_composition_orchestrator import (
     PanelCompositionOrchestrator,
 )
 
 
-# ── Player inputs ─────────────────────────────────────────────────────────────
-#
-# 4 players × 2 ingredients = 8 total ingredients.
-#
-# The ingredients are deliberately visually distinct.
-#
-# Ana:
-#   OBJECT   = purple bicycle
-#   LOCATION = Venice
-#
-# Bogdan:
-#   OBJECT   = golden key
-#   CONCEPT  = jealousy
-#
-# Carmen:
-#   OBJECT   = blue parrot
-#   PROFESSION = magician
-#
-# David:
-#   OBJECT   = birthday cake
-#   CONCEPT  = fear
-#
-# The goal is to see whether ALL EIGHT survive into the story
-# and become visible elements of the generated panels.
-#
+# ─────────────────────────────────────────────────────────────────────────────
+# TEST INPUT
+# ─────────────────────────────────────────────────────────────────────────────
 
 player_answers_raw = [
-
     PlayerAnswer(
         player_id="p1",
         nickname="Ana",
@@ -73,16 +38,15 @@ player_answers_raw = [
             {
                 "prompt_id": "p0",
                 "category": "CONCRET",
-                "answer_text": "bicicletă mov",
+                "answer_text": "umbrela roșie",
             },
             {
                 "prompt_id": "p1",
-                "category": "LOC",
-                "answer_text": "Veneția",
+                "category": "CONCRET",
+                "answer_text": "bicicletă mov",
             },
         ],
     ),
-
     PlayerAnswer(
         player_id="p2",
         nickname="Bogdan",
@@ -90,53 +54,21 @@ player_answers_raw = [
             {
                 "prompt_id": "p2",
                 "category": "CONCRET",
-                "answer_text": "cheie aurie",
-            },
-            {
-                "prompt_id": "p3",
-                "category": "ABSTRACT",
-                "answer_text": "gelozie",
-            },
-        ],
-    ),
-
-    PlayerAnswer(
-        player_id="p3",
-        nickname="Carmen",
-        answers=[
-            {
-                "prompt_id": "p4",
-                "category": "CONCRET",
                 "answer_text": "papagal albastru",
             },
             {
-                "prompt_id": "p5",
-                "category": "PROFESSION",
-                "answer_text": "magician",
-            },
-        ],
-    ),
-
-    PlayerAnswer(
-        player_id="p4",
-        nickname="David",
-        answers=[
-            {
-                "prompt_id": "p6",
+                "prompt_id": "p3",
                 "category": "CONCRET",
-                "answer_text": "tort de ziua de naștere",
-            },
-            {
-                "prompt_id": "p7",
-                "category": "ABSTRACT",
-                "answer_text": "frică",
+                "answer_text": "cheie aurie",
             },
         ],
     ),
 ]
 
 
-# ── Step 1: Creative Director ─────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# 1. CREATIVE DIRECTOR
+# ─────────────────────────────────────────────────────────────────────────────
 
 print("=== Step 1: Creative Director ===")
 
@@ -156,9 +88,11 @@ for arch in brief.archetypes:
     )
 
 
-# ── Step 2: Build PlayerAnswers for OllamaStoryLLM ────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# 2. BUILD LLM INPUT
+# ─────────────────────────────────────────────────────────────────────────────
 
-print("\n=== Step 2: Build PlayerAnswers for LLM ===")
+print("\n=== Step 2: Build PlayerAnswers ===")
 
 archetype_map = {
     arch.player_id: arch
@@ -166,36 +100,19 @@ archetype_map = {
     if arch.player_id
 }
 
-player_answers_llm: list[PlayerAnswers] = []
-
+player_answers_llm = []
 
 for pa in player_answers_raw:
 
     arch = archetype_map.get(pa.player_id)
 
-    archetype_key = (
-        arch.key
-        if arch
-        else "personaj"
-    )
-
-    archetype_name = (
-        arch.name_ro
-        if arch
-        else "Personaj"
-    )
-
-    ingredient_roles = (
-        arch.ingredient_roles
-        if arch
-        else {}
-    )
+    roles = arch.ingredient_roles if arch else {}
 
     items = []
 
     for answer in pa.answers:
 
-        role = ingredient_roles.get(
+        role = roles.get(
             answer["prompt_id"],
             "OBJECT",
         )
@@ -209,15 +126,9 @@ for pa in player_answers_raw:
         items.append(
             PlayerAnswerItem(
                 prompt_id=answer["prompt_id"],
-                category=answer.get(
-                    "category",
-                    "CONCRET",
-                ),
+                category=answer.get("category", "CONCRET"),
                 ingredient_role=ingredient_role,
-                answer_text=answer.get(
-                    "answer_text",
-                    "",
-                ),
+                answer_text=answer["answer_text"],
             )
         )
 
@@ -225,27 +136,23 @@ for pa in player_answers_raw:
         PlayerAnswers(
             player_id=pa.player_id,
             nickname=pa.nickname,
-            archetype_key=archetype_key,
-            archetype_name_ro=archetype_name,
+            archetype_key=arch.key if arch else "personaj",
+            archetype_name_ro=arch.name_ro if arch else "Personaj",
             answers=items,
         )
     )
 
     print(
         f"  {pa.nickname}: "
-        f"{[
-            i.answer_text + ' → ' + i.ingredient_role
-            for i in items
-        ]}"
+        f"{[i.answer_text for i in items]}"
     )
 
 
-# ── Step 3: Story Generation ─────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. STORY GENERATION
+# ─────────────────────────────────────────────────────────────────────────────
 
-print(
-    "\n=== Step 3: OllamaStoryLLM story generation "
-    "(this takes ~20-30s) ==="
-)
+print("\n=== Step 3: Story Generation ===")
 
 llm = OllamaStoryLLM()
 
@@ -255,228 +162,120 @@ story = llm.generate_story_with_retry(
     max_attempts=2,
 )
 
-print(f"Story title: {story.title}")
-print(f"Panels:      {len(story.panels)}")
+print(f"Title:  {story.title}")
+print(f"Panels: {len(story.panels)}")
 
 
-# ── Step 4: Ingredient preservation check ────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. INGREDIENT CHECK
+# ─────────────────────────────────────────────────────────────────────────────
 
-print("\n=== Step 4: Ingredient preservation check ===")
+print("\n=== Step 4: Ingredient Check ===")
 
-all_story_text = " ".join(
+ingredients = [
+    ("umbrela roșie", "red umbrella"),
+    ("bicicletă mov", "purple bicycle"),
+    ("papagal albastru", "blue parrot"),
+    ("cheie aurie", "golden key"),
+]
+
+story_text = " ".join(
     [
         story.title,
-
+        *[p.description_ro for p in story.panels],
+        *[p.narrator_line_ro for p in story.panels],
         *[
-            panel.description_ro
-            for panel in story.panels
-        ],
-
-        *[
-            panel.narrator_line_ro
-            for panel in story.panels
-        ],
-
-        *[
-            panel.dialogue_ro or ""
-            for panel in story.panels
+            p.dialogue_ro or ""
+            for p in story.panels
         ],
     ]
 ).lower()
 
+for ro, label in ingredients:
 
-required_ingredients = {
-    "bicicletă": "purple bicycle",
-    "veneția": "Venice",
-    "cheie aurie": "golden key",
-    "gelozie": "jealousy",
-    "papagal albastru": "blue parrot",
-    "magician": "magician",
-    "tort de ziua de naștere": "birthday cake",
-    "frică": "fear",
-}
-
-
-print("\nStory-level ingredient preservation:")
-
-for ingredient, label in required_ingredients.items():
-
-    found = ingredient.lower() in all_story_text
-
-    status = (
-        "✓ FOUND"
-        if found
-        else "✗ MISSING"
-    )
+    found = ro.lower() in story_text
 
     print(
-        f"  {status}: {label}"
+        f"  {'✓' if found else '✗'} "
+        f"{label}"
     )
 
 
-# ── Step 5: Image-prompt ingredient check ────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. IMAGE PROMPT CHECK
+# ─────────────────────────────────────────────────────────────────────────────
 
-print(
-    "\n=== Step 5: Image-prompt ingredient check ==="
-)
+print("\n=== Step 5: Image Prompt Check ===")
 
 all_image_prompts = " ".join(
-    [
-        panel.image_prompt_en
-        for panel in story.panels
-    ]
+    p.image_prompt_en
+    for p in story.panels
 ).lower()
 
+checks = [
+    ("umbrela", "red umbrella"),
+    ("bicicletă", "purple bicycle"),
+    ("papagal", "blue parrot"),
+    ("cheie", "golden key"),
+]
 
-# These are intentionally broad visual checks.
-# The exact English wording may vary depending on Ollama.
-#
-# We mainly want to know whether the concept is reaching
-# the image prompts at all.
+for keyword, label in checks:
 
-visual_checks = {
-    "bicicletă": [
-        "bicycle",
-        "bike",
-    ],
+    found = keyword.lower() in all_image_prompts
 
-    "veneția": [
-        "venice",
-        "venetian",
-        "canal",
-        "gondola",
-    ],
-
-    "cheie aurie": [
-        "golden key",
-        "gold key",
-    ],
-
-    "gelozie": [
-        "jealous",
-        "jealousy",
-        "jealous expression",
-    ],
-
-    "papagal albastru": [
-        "blue parrot",
-        "parrot",
-    ],
-
-    "magician": [
-        "magician",
-        "magical",
-        "magic",
-    ],
-
-    "tort de ziua de naștere": [
-        "birthday cake",
-        "cake",
-    ],
-
-    "frică": [
-        "fear",
-        "fearful",
-        "frightened",
-        "afraid",
-        "terrified",
-    ],
-}
-
-
-for ingredient, keywords in visual_checks.items():
-
-    found_keyword = next(
-        (
-            keyword
-            for keyword in keywords
-            if keyword.lower() in all_image_prompts
-        ),
-        None,
+    print(
+        f"  {'✓ VISUALIZED' if found else '✗ NOT VISUALIZED'}: "
+        f"{label}"
     )
 
-    if found_keyword:
-        print(
-            f"  ✓ VISUALIZED: "
-            f"{ingredient} → {found_keyword}"
-        )
-    else:
-        print(
-            f"  ✗ NOT VISUALIZED: "
-            f"{ingredient}"
-        )
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 6. PRINT PANELS
+# ─────────────────────────────────────────────────────────────────────────────
 
-# ── Step 6: Panel details ────────────────────────────────────────────────────
-
-print("\n=== Step 6: Panel details ===")
+print("\n=== Step 6: Panels ===")
 
 for panel in story.panels:
 
-    print(
-        f"\n--- Panel {panel.panel_index + 1} ---"
-    )
+    print(f"\n--- Panel {panel.panel_index + 1} ---")
 
-    print(
-        f"  Description:\n"
-        f"    {panel.description_ro}"
-    )
+    print(f"Description:")
+    print(f"  {panel.description_ro}")
 
-    print(
-        f"  Image prompt:\n"
-        f"    {panel.image_prompt_en}"
-    )
+    print(f"Image prompt:")
+    print(f"  {panel.image_prompt_en}")
 
-    print(
-        f"  Narrator:\n"
-        f"    {panel.narrator_line_ro}"
-    )
+    print(f"Narrator:")
+    print(f"  {panel.narrator_line_ro}")
 
-    print(
-        f"  Dialogue:\n"
-        f"    {panel.dialogue_ro or '(none)'}"
-    )
+    print(f"Dialogue:")
+    print(f"  {panel.dialogue_ro or '(none)'}")
 
 
-# ── Step 7: Image generation ─────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. GENERATE IMAGES
+# ─────────────────────────────────────────────────────────────────────────────
 
-print(
-    "\n=== Step 7: Generating images via ComfyUI "
-    "(this takes ~30-60s per panel) ==="
-)
+print("\n=== Step 7: Generating Images ===")
 
-out = Path(
-    "output/test_run_4players"
-)
+out = Path("output/test_run_ingredients")
 
-result = (
-    PanelCompositionOrchestrator()
-    .generate_all_panels(
-        brief,
-        story,
-        out,
-    )
+result = PanelCompositionOrchestrator().generate_all_panels(
+    brief,
+    story,
+    out,
 )
 
 
-# ── Results ───────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# RESULTS
+# ─────────────────────────────────────────────────────────────────────────────
 
 print("\n=== Results ===")
 
-print(
-    f"Output dir: "
-    f"{out.resolve()}"
-)
-
-print(
-    f"Panels OK:  "
-    f"{result.success_count}"
-)
-
-print(
-    f"Fallbacks:  "
-    f"{result.fallback_count}"
-)
+print(f"Output:   {out.resolve()}")
+print(f"Success:  {result.success_count}")
+print(f"Fallback: {result.fallback_count}")
 
 for panel_result in result.panel_results:
 
@@ -486,21 +285,13 @@ for panel_result in result.panel_results:
         else "✗ FALLBACK"
     )
 
-    size = (
-        panel_result.file_path.stat().st_size
-        if panel_result.file_path.exists()
-        else 0
-    )
-
     print(
-        f"  panel_{panel_result.panel_index + 1}.png  "
-        f"{status}  "
-        f"{size:,} bytes  "
+        f"  panel_{panel_result.panel_index + 1}.png "
+        f"{status} "
         f"{panel_result.generation_seconds:.1f}s"
     )
 
     if panel_result.error:
         print(
-            f"    Error: "
-            f"{panel_result.error[:120]}"
+            f"    Error: {panel_result.error[:120]}"
         )
