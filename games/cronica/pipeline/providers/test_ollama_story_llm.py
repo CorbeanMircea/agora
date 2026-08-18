@@ -507,15 +507,13 @@ class TestUserPrompt:
 
 class TestJsonSchemaExample:
     @pytest.mark.parametrize("panel_count", [4, 5, 6, 8])
-    def test_schema_example_has_correct_panel_count(self):
-        for panel_count in [4, 5, 6, 8]:
-            example = _build_json_schema_example(panel_count)
-            data = json.loads(example)
-            assert len(data["panels"]) == panel_count
-            # narrator_script and image_prompts are no longer in the schema example;
-            # they are always reconstructed from panels after parsing.
-            assert "narrator_script" not in data
-            assert "image_prompts" not in data
+    def test_schema_example_has_correct_panel_count(self, panel_count: int):
+        example = _build_json_schema_example(panel_count)
+        data = json.loads(example)
+        assert len(data["panels"]) == panel_count
+        # narrator_script and image_prompts are reconstructed from panels — not in schema example
+        assert "narrator_script" not in data
+        assert "image_prompts" not in data
 
     @pytest.mark.parametrize("panel_count", [4, 5, 6, 8])
     def test_schema_example_has_correct_panel_indices(self, panel_count: int):

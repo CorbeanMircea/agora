@@ -59,8 +59,10 @@ class TestCharacterSheet:
             archetype_name_ro="Victima",
             clothing_colour="red",
             clothing_colour_verbose="vibrant red",
-            hair_description="short dark hair",
-            distinguishing_feature="wearing thick-rimmed glasses",
+            clothing_hex="#E74C3C",
+            hair_description="short dark hair",   # keep original per-test value
+            distinguishing_feature="wearing thick-rimmed glasses",   # keep original per-test value
+            age="mid-30s",
         )
         fragment = sheet.to_prompt_fragment()
         assert "Victima" in fragment
@@ -73,8 +75,10 @@ class TestCharacterSheet:
             archetype_name_ro="Victima",
             clothing_colour="red",
             clothing_colour_verbose="vibrant red",
-            hair_description="short dark hair",
-            distinguishing_feature="wearing thick-rimmed glasses",
+            clothing_hex="#E74C3C",
+            hair_description="short dark hair",   # keep original per-test value
+            distinguishing_feature="wearing thick-rimmed glasses",   # keep original per-test value
+            age="mid-30s",
         )
         fragment = sheet.to_prompt_fragment()
         assert "vibrant red" in fragment
@@ -87,11 +91,13 @@ class TestCharacterSheet:
             archetype_name_ro="Victima",
             clothing_colour="red",
             clothing_colour_verbose="vibrant red",
-            hair_description="long blonde hair",
-            distinguishing_feature="wearing thick-rimmed glasses",
+            clothing_hex="#E74C3C",
+            hair_description="short dark hair",   # keep original per-test value
+            distinguishing_feature="wearing thick-rimmed glasses",   # keep original per-test value
+            age="mid-30s",
         )
         fragment = sheet.to_prompt_fragment()
-        assert "long blonde hair" in fragment
+        assert "short dark hair" in fragment
 
     def test_to_prompt_fragment_contains_distinguishing_feature(self):
         sheet = CharacterSheet(
@@ -101,11 +107,13 @@ class TestCharacterSheet:
             archetype_name_ro="Victima",
             clothing_colour="red",
             clothing_colour_verbose="vibrant red",
-            hair_description="short dark hair",
-            distinguishing_feature="with a prominent moustache",
+            clothing_hex="#E74C3C",
+            hair_description="short dark hair",   # keep original per-test value
+            distinguishing_feature="wearing thick-rimmed glasses",   # keep original per-test value
+            age="mid-30s",
         )
         fragment = sheet.to_prompt_fragment()
-        assert "with a prominent moustache" in fragment
+        assert "wearing thick-rimmed glasses" in fragment
 
     def test_to_prompt_fragment_is_ascii(self):
         sheet = CharacterSheet(
@@ -115,8 +123,10 @@ class TestCharacterSheet:
             archetype_name_ro="Victima",
             clothing_colour="red",
             clothing_colour_verbose="vibrant red",
-            hair_description="short dark hair",
-            distinguishing_feature="wearing thick-rimmed glasses",
+            clothing_hex="#E74C3C",
+            hair_description="short dark hair",   # keep original per-test value
+            distinguishing_feature="wearing thick-rimmed glasses",   # keep original per-test value
+            age="mid-30s",
         )
         fragment = sheet.to_prompt_fragment()
         # Prompt fragments fed to ComfyUI must be ASCII-compatible
@@ -130,8 +140,9 @@ class TestCharacterSheet:
             archetype_name_ro="Victima",
             clothing_colour="red",
             clothing_colour_verbose="vibrant red",
-            hair_description="short dark hair",
-            distinguishing_feature="wearing thick-rimmed glasses",
+            clothing_hex="#E74C3C",
+            hair_description="short dark hair",   # keep original per-test value
+            age="mid-30s",
         )
         data = sheet.to_dict()
         json_str = json.dumps(data)  # must not raise
@@ -150,8 +161,9 @@ class TestCharacterRoster:
                 archetype_name_ro=f"Arhetip{i}",
                 clothing_colour=_CHARACTER_COLOURS[i][0],
                 clothing_colour_verbose=_CHARACTER_COLOURS[i][1],
-                hair_description="short dark hair",
-                distinguishing_feature="wearing thick-rimmed glasses",
+                clothing_hex=_CHARACTER_COLOURS[i][2],
+                hair_description="short dark hair",   # keep original per-test value
+                age="mid-30s",
             )
             for i in range(count)
         ]
@@ -248,8 +260,9 @@ class TestCharacterDescriptionGenerator:
             assert sheet.archetype_name_ro
             assert sheet.clothing_colour
             assert sheet.clothing_colour_verbose
+            assert sheet.clothing_hex
             assert sheet.hair_description
-            assert sheet.distinguishing_feature
+            assert sheet.age
 
     def test_generation_is_deterministic_same_seed(self):
         brief_a = _make_brief(seed=5, player_count=4)
@@ -261,7 +274,7 @@ class TestCharacterDescriptionGenerator:
             assert a.archetype_key == b.archetype_key
             assert a.clothing_colour == b.clothing_colour
             assert a.hair_description == b.hair_description
-            assert a.distinguishing_feature == b.distinguishing_feature
+            assert a.age == b.age
 
     def test_prompt_fragments_are_all_non_empty(self):
         brief = _make_brief(seed=0, player_count=4)
@@ -271,13 +284,17 @@ class TestCharacterDescriptionGenerator:
             fragment = sheet.to_prompt_fragment()
             assert len(fragment.strip()) > 0
 
-    def test_prompt_fragments_contain_archetype_name(self):
+    def test_prompt_fragments_contain_nickname(self):
+        """Prompt fragments must use the player nickname, not the archetype role name."""
         brief = _make_brief(seed=0, player_count=4)
         gen = CharacterDescriptionGenerator()
         roster = gen.generate(brief)
         for sheet in roster.sheets:
             fragment = sheet.to_prompt_fragment()
-            assert sheet.archetype_name_ro in fragment
+            # Fragment must contain the player nickname
+            assert sheet.nickname in fragment
+            # Fragment must NOT contain the archetype name (that's a narrative role, not a visual description)
+            assert sheet.archetype_name_ro not in fragment
 
     def test_player_ids_match_brief_archetypes(self):
         brief = _make_brief(seed=0, player_count=4)

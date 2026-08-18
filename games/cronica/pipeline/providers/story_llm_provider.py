@@ -214,6 +214,40 @@ class Story:
             image_prompts=list(data["image_prompts"]),
         )
 
+    def sanitize_image_prompts(self) -> "Story":
+        """
+        Return a new Story with non-ASCII characters stripped from all
+        image_prompt_en fields. Called before validate() when the LLM
+        produces Romanian diacritics in image prompts despite instructions.
+
+        Replaces diacritics with their ASCII approximations where possible,
+        otherwise drops the character.
+        """
+        import unicodedata
+
+        def _to_ascii(text: str) -> str:
+            # Normalize to decomposed form, then encode to ASCII dropping combining chars
+            normalized = unicodedata.normalize("NFKD", text)
+            return normalized.encode("ascii", errors="ignore").decode("ascii")
+
+        new_panels = []
+        for panel in self.panels:
+            new_panels.append(PanelDescription(
+                panel_index=panel.panel_index,
+                description_ro=panel.description_ro,
+                dialogue_ro=panel.dialogue_ro,
+                image_prompt_en=_to_ascii(panel.image_prompt_en),
+                narrator_line_ro=panel.narrator_line_ro,
+                characters_in_panel=list(panel.characters_in_panel),
+            ))
+
+        return Story(
+            title=self.title,
+            panels=new_panels,
+            narrator_script=list(self.narrator_script),
+            image_prompts=[_to_ascii(p) for p in self.image_prompts],
+        )
+
     @classmethod
     def generate_fallback(
         cls,
@@ -390,6 +424,9 @@ class StoryLLMProvider(ABC):
             try:
                 story = self.generate_story(brief, player_answers)
                 panel_count = getattr(brief, "panel_count", len(story.panels))
+                # Sanitize ASCII before validation — LLM sometimes outputs diacritics
+                # in image_prompt_en despite instructions
+                story = story.sanitize_image_prompts()
                 errors = story.validate(panel_count)
                 if not errors:
                     return story

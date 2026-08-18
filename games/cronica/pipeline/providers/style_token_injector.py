@@ -4,24 +4,14 @@ M5.4 — Style Token Injection
 Translates a CreativeBrief's genre visual style, presentation format,
 and per-panel camera rules into ComfyUI prompt tokens.
 
-Produces:
-  - A populated VisualStyle (genre + format tokens merged)
-  - A list of per-panel ImagePrompt objects with camera and style tokens
+Target visual style: bold Romanian comic book, matching the reference image —
+strong ink outlines, exaggerated expressive characters, vibrant saturated
+colors, dramatic lighting, detailed illustrated environments.
 
-Design constraints (TASKS.md M5.4):
-  - Tokens constructed deterministically from the CreativeBrief.
-  - No hard-coded prompt strings outside this module.
-  - Camera language per panel translated to composition tokens
-    (from CreativeBrief.camera_language[i].prompt_tokens).
-  - Genre positive/negative tokens come from GenreDefinition.
-  - Format positive/negative tokens come from FormatDefinition.
-  - The two token sets are merged (genre first, format second).
-
-Usage (Panel Composition Orchestrator, M5.5):
-::
-    injector = StyleTokenInjector()
-    visual_style = injector.build_visual_style(brief)
-    image_prompts = injector.build_image_prompts(brief, story, character_roster)
+Text (narration boxes, speech bubbles) is handled by a separate PIL renderer
+in Part B. The image generator produces clean artwork; text is overlaid after.
+Therefore negative tokens do NOT ban speech bubbles from the artwork itself —
+the model should produce comic-style artwork and the text layer is added post.
 """
 
 from __future__ import annotations
@@ -33,113 +23,70 @@ from ..creative_director.genre_registry import get_genre
 from ..creative_director.format_registry import get_format
 from ..creative_director.models import PresentationFormat
 
-# Global game visual style — applied to every panel regardless of genre.
-# This defines the illustrated graphic-novel aesthetic of the game.
-# Genre tokens modify narrative tone; this constant defines the visual medium.
+# ── Global comic-book style anchor ────────────────────────────────────────────
+#
+# These tokens are prepended to EVERY panel prompt regardless of genre.
+# They establish the visual medium: bold Romanian comic-book illustration.
+# Matching the reference image style.
+#
 _GLOBAL_STYLE_POSITIVE: list[str] = [
-    "cinematic illustrated painting",
-    "painterly illustration",
-    "storyboard art",
-    "concept art illustration",
-    "painterly textures",
-    "realistic human proportions",
-    "expressive facial features",
-    "atmospheric environments",
-    "rich muted colors",
+    "highly detailed comic book illustration",
+    "bold dark ink outlines",
+    "exaggerated expressive cartoon characters",
+    "dynamic action poses",
+    "vibrant saturated colors",
     "dramatic cinematic lighting",
-    "high quality digital painting",
-    "cinematic painted scene",
-    "illustrated scene painting",
-    "detailed scene painting",
+    "strong contrast",
+    "detailed illustrated background",
+    "polished digital comic art",
+    "humorous absurd visual storytelling",
+    "professional comic book artwork",
+    "graphic novel illustration",
 ]
 
+# Negative tokens: prevent photorealism and low quality.
+# We do NOT ban speech bubbles here — text overlay handles that in Part B.
 _GLOBAL_STYLE_NEGATIVE: list[str] = [
     "photorealistic",
     "photograph",
     "photography",
-    "photo",
     "realistic photo",
     "hyperrealistic",
     "3d render",
     "CGI",
     "anime",
     "manga",
-    "manga panel",
-    "cartoon",
-    "Pixar",
-    "Disney",
     "flat vector",
     "low quality",
     "blurry",
-    # Comic book conventions that trigger speech bubbles
-    "comic book",
-    "comic panel",
-    "graphic novel",
-    "sequential art",
-    # Text and typography prohibitions
-    "text",
-    "caption",
-    "captions",
-    "subtitle",
-    "subtitles",
-    "speech bubble",
-    "speech bubbles",
-    "dialogue bubble",
-    "dialogue bubbles",
-    "word balloon",
-    "thought bubble",
-    "written text",
-    "typography",
-    "label",
-    "labels",
-    "watermark",
-    "logo",
-    "signature",
-    "character name",
-    "character names",
-    "title card",
-    "overlay text",
-    "onomatopoeia",
-    "subtitle bar",
-    "subtitles bar",
-    "film subtitle",
-    "closed caption",
-    "lower third",
-    "chyron",
-    "intertitle",
-    "title card",
+    "watercolor",
+    "oil painting",
+    "impressionist",
+    "abstract",
+    "sketch",
+    "pencil drawing",
+    "bad anatomy",
+    "deformed",
+    "ugly",
+    "worst quality",
 ]
+
 
 class StyleTokenInjector:
     """
     Builds VisualStyle and ImagePrompt objects from a CreativeBrief.
-
-    All token construction is deterministic: the same brief always produces
-    the same tokens. No randomness is introduced here.
+    All token construction is deterministic.
     """
 
     def build_visual_style(self, brief: Any) -> VisualStyle:
         """
         Build a fully populated VisualStyle from a CreativeBrief.
 
-        Merges genre-level and format-level style tokens into the
-        positive/negative token lists consumed by FluxImageGenerator.
-
-        Parameters
-        ----------
-        brief:
-            A populated CreativeBrief instance.
-
-        Returns
-        -------
-        VisualStyle
-            With genre + format style tokens merged into
-            style_tokens_positive and style_tokens_negative.
+        Merges global comic style + genre-level + format-level tokens.
         """
         genre_key: str = getattr(brief, "genre_key", "")
         fmt_value: str = getattr(brief, "format", "")
 
-        # Retrieve genre and format style tokens
         genre_positive: list[str] = []
         genre_negative: list[str] = []
         if genre_key:
@@ -161,8 +108,7 @@ class StyleTokenInjector:
             except (ValueError, KeyError):
                 pass
 
-        # Merge: global game style first, then genre, then format (deduplicating)
-        # Global style defines the visual medium (illustrated); genre/format define the narrative tone.
+        # Global comic style first, then genre/format (deduplicating)
         merged_positive = _merge_tokens(
             _GLOBAL_STYLE_POSITIVE,
             _merge_tokens(genre_positive, format_positive),
@@ -189,28 +135,10 @@ class StyleTokenInjector:
     ) -> list[ImagePrompt]:
         """
         Build one ImagePrompt per panel from the brief, story, and roster.
-
-        Parameters
-        ----------
-        brief:
-            A populated CreativeBrief instance.
-        story:
-            A Story instance (from story_llm_provider).
-            story.panels[i].image_prompt_en is the LLM-generated base prompt.
-            story.panels[i].characters_in_panel lists archetype keys.
-        character_roster:
-            A CharacterRoster instance (from character_description).
-            May be None — character descriptions are skipped if absent.
-
-        Returns
-        -------
-        list[ImagePrompt]
-            One ImagePrompt per panel, in panel order.
         """
         visual_style = self.build_visual_style(brief)
         panel_count: int = getattr(brief, "panel_count", 0)
 
-        # Build camera token map: panel_index → prompt_tokens
         camera_rules = list(getattr(brief, "camera_language", []))
         camera_token_map: dict[int, str] = {}
         for rule in camera_rules:
@@ -233,7 +161,7 @@ class StyleTokenInjector:
 
             camera_tokens: str = camera_token_map.get(i, "")
 
-            # Character descriptions from the roster
+            # Character descriptions from the roster (plain strings)
             char_descriptions: list[str] = []
             if character_roster is not None and archetype_keys:
                 char_descriptions = character_roster.build_panel_character_descriptions(
@@ -257,7 +185,7 @@ class StyleTokenInjector:
 def _merge_tokens(primary: list[str], secondary: list[str]) -> list[str]:
     """
     Merge two token lists, preserving order and removing duplicates.
-    Primary tokens come first; secondary tokens are appended if not already present.
+    Primary tokens come first; secondary tokens appended if not already present.
     Comparison is case-insensitive.
     """
     seen: set[str] = set()

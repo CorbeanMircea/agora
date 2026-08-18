@@ -37,7 +37,7 @@ class ImagePrompt:
     base_prompt: str
 
     # Style tokens from the genre + format (English, comma-separated).
-    # Appended to base_prompt by the generator.
+    # Prepended to base_prompt by the generator.
     style_tokens_positive: list[str] = field(default_factory=list)
 
     # Negative style tokens to guide the model away from unwanted aesthetics.
@@ -48,22 +48,40 @@ class ImagePrompt:
 
     # Character visual descriptions to inject into the prompt for each
     # character appearing in this panel. Built from CharacterSheet (M5.2).
+    # Each entry is a plain English string, e.g.:
+    #   "Ana: short dark hair, vibrant red clothing, wearing thick-rimmed glasses"
     character_descriptions: list[str] = field(default_factory=list)
 
     def build_positive_prompt(self) -> str:
-        # Style anchor first — establishes the visual medium before scene content.
-        # Character descriptions second — weighted highly by FLUX.1 schnell.
-        # Scene content and camera last.
-        style = ", ".join(self.style_tokens_positive) if self.style_tokens_positive else ""
-        parts = []
-        if style:
-            parts.append(style)
-        if self.character_descriptions:
-            parts.append(self.character_descriptions)
-        parts.append(self.base_prompt)
-        if self.camera_tokens:
-            parts.append(self.camera_tokens)
-        return ", ".join(filter(None, parts))
+        """
+        Assemble the final positive prompt string for ComfyUI.
+
+        Order (most influential first for FLUX.1 schnell):
+          1. Global comic style anchor (from style_tokens_positive)
+          2. Character visual descriptions (keeps faces consistent)
+          3. Scene content from base_prompt
+          4. Camera/composition tokens
+        """
+        parts: list[str] = []
+
+        # 1. Style tokens — establish visual medium first
+        if self.style_tokens_positive:
+            parts.append(", ".join(t.strip() for t in self.style_tokens_positive if t.strip()))
+
+        # 2. Character descriptions — each as a separate phrase
+        for desc in self.character_descriptions:
+            if desc and desc.strip():
+                parts.append(desc.strip())
+
+        # 3. Base scene prompt
+        if self.base_prompt and self.base_prompt.strip():
+            parts.append(self.base_prompt.strip())
+
+        # 4. Camera tokens
+        if self.camera_tokens and self.camera_tokens.strip():
+            parts.append(self.camera_tokens.strip())
+
+        return ", ".join(parts)
 
     def build_negative_prompt(self) -> str:
         """Assemble the final negative prompt string for ComfyUI."""
@@ -111,11 +129,6 @@ class VisualStyle:
     def from_brief(cls, brief: Any) -> "VisualStyle":
         """
         Construct a VisualStyle from a populated CreativeBrief instance.
-
-        Parameters
-        ----------
-        brief:
-            A CreativeBrief instance (from creative_director.models).
         """
         return cls(
             genre_key=getattr(brief, "genre_key", "unknown"),
@@ -131,10 +144,6 @@ class VisualStyle:
 class PanelImage:
     """
     The output of a single panel generation call.
-
-    Wraps the path to the generated PNG file and generation metadata.
-    Consumed by the Panel Composition Orchestrator (M5.5) and ultimately
-    loaded by the Tauri presenter (M7.2).
     """
 
     # 0-based panel index this image represents.
@@ -176,13 +185,6 @@ class PanelImage:
 class ImageGeneratorProvider(ABC):
     """
     Abstract base class for image generation implementations.
-
-    All concrete implementations (FluxImageGenerator for ComfyUI,
-    future cloud providers) must satisfy this interface. The orchestrator
-    and panel composition loop call only this interface — never the
-    concrete class directly.
-
-    GDD Section 7.1.
     """
 
     @abstractmethod
@@ -194,32 +196,6 @@ class ImageGeneratorProvider(ABC):
     ) -> PanelImage:
         """
         Generate a single comic panel image.
-
-        Parameters
-        ----------
-        prompt:
-            The fully assembled image prompt for this panel (English, ASCII).
-            character_descriptions within the prompt are provided here as
-            well as separately for implementations that handle them differently.
-        style:
-            The visual style specification from the CreativeBrief.
-        character_descriptions:
-            Visual descriptions of characters appearing in this panel,
-            derived from CharacterSheet objects (M5.2). May be empty if
-            the panel has no named characters.
-
-        Returns
-        -------
-        PanelImage
-            Wraps the path to the generated PNG and generation metadata.
-            The file must exist on disk when this method returns.
-
-        Raises
-        ------
-        ImageGenerationError
-            If the panel cannot be generated and no fallback is available.
-        RuntimeError
-            On unexpected failures from the underlying generation service.
         """
         ...
 
@@ -232,32 +208,10 @@ class ImageGeneratorProvider(ABC):
     ) -> PanelImage:
         """
         Call generate_panel and return a fallback PanelImage on failure.
-
-        The fallback writes a 1-byte placeholder PNG stub so the pipeline
-        never crashes a round due to a single panel generation failure.
-        The orchestrator retries once before falling back (M5.5).
-
-        Parameters
-        ----------
-        prompt:
-            The image prompt for this panel.
-        style:
-            The visual style from the CreativeBrief.
-        character_descriptions:
-            Character visual descriptions for this panel.
-        fallback_path:
-            Path where the fallback stub file will be written if generation
-            fails.
-
-        Returns
-        -------
-        PanelImage
-            Either the successfully generated image or a fallback stub.
         """
         try:
             return self.generate_panel(prompt, style, character_descriptions)
         except Exception:
-            # Write a minimal PNG stub so downstream steps have a file to reference.
             fallback_path.parent.mkdir(parents=True, exist_ok=True)
             if not fallback_path.exists():
                 fallback_path.write_bytes(b"\x89PNG_FALLBACK")
@@ -275,9 +229,6 @@ class ImageGeneratorProvider(ABC):
 class ImageGenerationError(RuntimeError):
     """
     Raised when an image generation provider cannot produce a panel.
-
-    Wraps provider-specific errors with context about which panel failed
-    so the orchestrator can log and respond appropriately.
     """
 
     def __init__(self, panel_index: int, reason: str) -> None:
