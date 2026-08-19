@@ -1,16 +1,11 @@
 """
-M5.5 — Panel Composition Orchestrator
+Panel Composition Orchestrator — SDXL + IP-Adapter version.
 
-Generates all comic panels sequentially by coordinating:
-  - CharacterDescriptionGenerator (M5.2) → CharacterRoster
-  - StyleTokenInjector (M5.4)            → per-panel ImagePrompt objects
-  - IngredientEnforcer                   → ingredient preservation in prompts
-  - FluxImageGenerator (M5.3)            → PNG files on disk
+Generates panels sequentially. After panel 1 completes:
+- Its output path is stored as the reference image.
+- Panels 2-5 receive IP-Adapter conditioning from panel 1.
 
-Design constraints (TASKS.md M5.5 + GDD Section 7.3):
-  - Panels generated in order (panel 1 first, panel N last).
-  - Partial failure: one panel failing retries once before stub PNG.
-  - Maximum 3 characters per panel (GDD Section 7.3).
+This gives character/style consistency across all panels.
 """
 
 from __future__ import annotations
@@ -61,20 +56,16 @@ class CompositionResult:
 
 class PanelCompositionOrchestrator:
     """
-    Coordinates the full panel generation loop for one round.
+    Coordinates sequential panel generation with IP-Adapter reference passing.
 
-    Usage
-    -----
-    ::
-        orchestrator = PanelCompositionOrchestrator()
-        result = orchestrator.generate_all_panels(brief, story, output_dir)
+    Panel 1 → text only → saved as reference image
+    Panel 2 → text + IP-Adapter(panel_1)
+    Panel 3 → text + IP-Adapter(panel_1)  ← always panel 1, not drifting
+    Panel 4 → text + IP-Adapter(panel_1)
+    Panel 5 → text + IP-Adapter(panel_1)
 
-    Optionally pass ingredient_specs to enforce ingredient preservation:
-    ::
-        from .ingredient_enforcer import build_ingredient_specs, enforce_ingredients_in_story
-        specs = build_ingredient_specs(player_answers_llm)
-        story = enforce_ingredients_in_story(story, specs)
-        result = orchestrator.generate_all_panels(brief, story, output_dir)
+    We always use panel 1 as the reference (not the previous panel) to prevent
+    style drift where each panel drifts slightly further from the original.
     """
 
     def __init__(
@@ -91,9 +82,6 @@ class PanelCompositionOrchestrator:
         story: Any,
         output_dir: Path,
     ) -> CompositionResult:
-        """
-        Generate all panels for a round sequentially.
-        """
         output_dir.mkdir(parents=True, exist_ok=True)
         panel_count: int = int(getattr(brief, "panel_count", 5))
 
@@ -109,9 +97,29 @@ class PanelCompositionOrchestrator:
         image_prompts = self._build_prompts(brief, story, roster)
         results: list[PanelResult] = []
 
+        # Reference image is None for panel 1 (text-only)
+        # Set to panel 1 output path after it completes
+        reference_path: Path | None = None
+
         for prompt in image_prompts:
+            # Set reference on generator before each panel
+            self._generator.reference_image_path = reference_path
+
             result = self._generate_one_panel(prompt, brief, output_dir)
             results.append(result)
+
+            # After panel 1 succeeds, use it as reference for all subsequent panels
+            if prompt.panel_index == 0 and not result.is_fallback:
+                reference_path = result.file_path
+                log.info(
+                    "Panel 1 complete — setting as IP-Adapter reference: %s",
+                    reference_path,
+                )
+            elif prompt.panel_index == 0 and result.is_fallback:
+                log.warning(
+                    "Panel 1 failed — subsequent panels will use text-only (no reference)"
+                )
+
             log.info(
                 "Panel %d/%d — %s (%.1fs)",
                 prompt.panel_index + 1,
@@ -122,7 +130,7 @@ class PanelCompositionOrchestrator:
 
         total = time.monotonic() - t_start
         log.info(
-            "Panel composition complete — %d ok, %d fallback, %.1fs total",
+            "Composition complete — %d ok, %d fallback, %.1fs total",
             sum(1 for r in results if not r.is_fallback),
             sum(1 for r in results if r.is_fallback),
             total,
@@ -145,7 +153,7 @@ class PanelCompositionOrchestrator:
             log.info("Character roster built — %d sheets", len(roster.sheets))
             return roster
         except Exception as exc:
-            log.warning("Character roster generation failed (non-fatal): %s", exc)
+            log.warning("Character roster generation failed: %s", exc)
             return None
 
     def _build_prompts(
@@ -158,7 +166,6 @@ class PanelCompositionOrchestrator:
             prompts = self._injector.build_image_prompts(
                 brief, story, character_roster=roster
             )
-            # Append dialogue presence note (without actual text — PIL layer handles text)
             panels = list(getattr(story, "panels", []))
             for prompt in prompts:
                 i = prompt.panel_index
@@ -180,7 +187,7 @@ class PanelCompositionOrchestrator:
                     base_prompt=(
                         panels[i].image_prompt_en
                         if i < len(panels)
-                        else f"wide shot panel {i + 1}, cinematic, comic book illustration"
+                        else f"wide shot panel {i + 1}, comic book illustration"
                     ),
                 )
                 for i in range(panel_count)
@@ -199,7 +206,7 @@ class PanelCompositionOrchestrator:
         for attempt in range(1, _MAX_PANEL_RETRIES + 2):
             t0 = time.monotonic()
             try:
-                panel_image = self._generator.generate_panel_to_file(
+                self._generator.generate_panel_to_file(
                     prompt=prompt,
                     style=visual_style,
                     character_descriptions=list(prompt.character_descriptions),
@@ -215,7 +222,7 @@ class PanelCompositionOrchestrator:
             except Exception as exc:
                 elapsed = time.monotonic() - t0
                 log.warning(
-                    "Panel %d generation failed (attempt %d/%d): %s",
+                    "Panel %d failed (attempt %d/%d): %s",
                     panel_num, attempt, _MAX_PANEL_RETRIES + 1, exc,
                 )
                 if attempt <= _MAX_PANEL_RETRIES:

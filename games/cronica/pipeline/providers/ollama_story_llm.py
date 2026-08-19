@@ -1,19 +1,14 @@
 """
 M4.4 / M4.5 — OllamaStoryLLM
 
-Concrete StoryLLMProvider that calls Ollama (Llama 3.1 8B) to generate
-a structured Romanian story from a CreativeBrief and player ingredients.
+Calls Ollama (Llama 3.1 8B) to generate a structured Romanian comic story.
 
-Key design principles (ADR-001):
-- Ingredients are presented to the LLM with their assigned IngredientRole.
-- Character visual identities are injected from CharacterRoster so the LLM
-  writes accurate image_prompt_en descriptions for consistent characters.
-- image_prompt_en describes WHAT TO DRAW — pure visual scene description.
-  Text overlays (narration boxes, speech bubbles) are added by a separate
-  PIL renderer in Part B. The image prompt should NOT say "no text" because
-  that suppresses the comic-book artwork style.
-- Archetype names (Expertul, Victima) are narrative roles only — never
-  visual descriptions.
+Key principles (ADR-001):
+- Character visual identities injected from CharacterRoster.
+- Ingredients presented with roles — model must integrate organically.
+- image_prompt_en is a visual scene spec: concrete, English, ASCII-only.
+- No "no text" instruction in image_prompt_en — negative prompts handle that.
+- Archetype names are narrative roles only, never visual descriptions.
 """
 
 from __future__ import annotations
@@ -35,13 +30,10 @@ from .story_llm_provider import (
 
 log = logging.getLogger("ollama_story_llm")
 
-# ── Configuration ─────────────────────────────────────────────────────────────
-
 OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 OLLAMA_TIMEOUT_SECS: float = float(os.getenv("OLLAMA_TIMEOUT_SECS", "60"))
 
-# IngredientRole → Romanian guidance for the LLM
 _ROLE_GUIDANCE_RO: dict[str, str] = {
     "CHARACTER":  "un personaj, ființă sau entitate care poate acționa",
     "LOCATION":   "un loc, spațiu sau ambient al acțiunii",
@@ -53,30 +45,30 @@ _ROLE_GUIDANCE_RO: dict[str, str] = {
     "ATMOSPHERE": "o calitate senzorială, emoție sau ton care colorează scena",
 }
 
-# How abstract roles translate into VISUAL representations
 _ROLE_VISUAL_GUIDANCE_EN: dict[str, str] = {
     "ATMOSPHERE": (
-        "Translate this into VISIBLE SIGNS: facial expressions, body language, "
-        "environmental effects, lighting, colors, weather, surrounding details. "
-        "Example: 'fear' → character with wide eyes, defensive posture, cold sweat, "
-        "dramatic shadows; 'jealousy' → character glaring with clenched fists, "
-        "watching another character with suspicious narrowed eyes."
+        "Show through VISIBLE SIGNS: facial expressions, body language, "
+        "environmental effects, lighting. Example: 'fear' → wide eyes, defensive posture, "
+        "cold sweat; 'jealousy' → glaring with clenched fists."
     ),
-    "CONCEPT": (
-        "Translate this into a VISUAL SITUATION or physical metaphor. "
-        "Make it visible through character behavior, objects, or environment."
-    ),
-    "ACTION": (
-        "Show this action HAPPENING — capture the motion, the moment, "
-        "the physical consequence of the action."
-    ),
+    "CONCEPT": "Translate into a VISUAL SITUATION or physical metaphor.",
+    "ACTION": "Show the action HAPPENING — capture the motion and consequence.",
+}
+
+# English translations for common Romanian ingredients
+# Used to build concrete examples in the schema
+_INGREDIENT_TRANSLATIONS: dict[str, str] = {
+    "bicicletă mov": "purple bicycle",
+    "papagal albastru": "blue parrot",
+    "cheie aurie": "golden key",
+    "umbrelă roșie": "red umbrella",
+    "tort de ziua de naștere": "birthday cake",
+    "frică": "fear (shown as trembling hands, wide eyes, defensive crouch)",
+    "gelozie": "jealousy (shown as narrowed eyes, clenched jaw, suspicious glare)",
 }
 
 
 class OllamaStoryLLM(StoryLLMProvider):
-    """
-    Calls Ollama (Llama 3.1 8B) to produce a structured Romanian comic story.
-    """
 
     def __init__(
         self,
@@ -93,37 +85,24 @@ class OllamaStoryLLM(StoryLLMProvider):
         brief: Any,
         player_answers: list[PlayerAnswers],
     ) -> Story:
-        """
-        Call Ollama and parse the JSON response into a Story.
-        """
         panel_count: int = getattr(brief, "panel_count", 5)
         player_names = [pa.nickname for pa in player_answers]
-
-        # Build character roster for visual identity injection
         roster = _build_roster_from_brief(brief)
-
         system_prompt = _build_system_prompt(brief, player_answers, roster)
         user_prompt = _build_user_prompt(
             panel_count=panel_count,
             player_names=player_names,
+            player_answers=player_answers,
             prior_errors=getattr(self, "_last_validation_errors", []),
         )
 
-        log.info(
-            "Calling Ollama model=%s panel_count=%d players=%s",
-            self.model,
-            panel_count,
-            player_names,
-        )
+        log.info("Calling Ollama model=%s panel_count=%d players=%s",
+                 self.model, panel_count, player_names)
         t0 = time.monotonic()
-
         response_text = self._call_ollama(system_prompt, user_prompt)
+        log.info("Ollama responded in %.1fs", time.monotonic() - t0)
 
-        elapsed = time.monotonic() - t0
-        log.info("Ollama responded in %.1fs", elapsed)
-
-        story = _parse_story_response(response_text, panel_count)
-        return story
+        return _parse_story_response(response_text, panel_count)
 
     def _call_ollama(self, system_prompt: str, user_prompt: str) -> str:
         payload = {
@@ -139,29 +118,18 @@ class OllamaStoryLLM(StoryLLMProvider):
                 {"role": "user",   "content": user_prompt},
             ],
         }
-
         url = f"{self.base_url}/api/chat"
         with httpx.Client(timeout=self.timeout) as client:
             resp = client.post(url, json=payload)
             resp.raise_for_status()
-
         data = resp.json()
-
         if "eval_count" in data:
-            log.info(
-                "Token usage — prompt: %s, eval: %s",
-                data.get("prompt_eval_count", "?"),
-                data.get("eval_count", "?"),
-            )
+            log.info("Tokens — prompt: %s, eval: %s",
+                     data.get("prompt_eval_count", "?"), data.get("eval_count", "?"))
+        return data["message"]["content"]
 
-        content: str = data["message"]["content"]
-        return content
-
-
-# ── Roster helper ─────────────────────────────────────────────────────────────
 
 def _build_roster_from_brief(brief: Any):
-    """Build a CharacterRoster from the brief for system prompt injection."""
     try:
         from .character_description import CharacterDescriptionGenerator
         return CharacterDescriptionGenerator().generate(brief)
@@ -170,31 +138,33 @@ def _build_roster_from_brief(brief: Any):
         return None
 
 
-# ── Prompt builders ───────────────────────────────────────────────────────────
+def _build_ingredient_english_map(player_answers: list[PlayerAnswers]) -> dict[str, str]:
+    """
+    Build a map of Romanian ingredient → English equivalent for all ingredients.
+    Used to give the LLM concrete translation examples in the prompt.
+    """
+    from .ingredient_enforcer import _translate_ingredient
+    result = {}
+    for pa in player_answers:
+        for ans in pa.answers:
+            en, color, obj = _translate_ingredient(ans.answer_text, ans.ingredient_role)
+            if color and obj:
+                result[ans.answer_text] = f"{color} {obj}"
+            else:
+                result[ans.answer_text] = en
+    return result
+
 
 def _build_system_prompt(
     brief: Any,
     player_answers: list[PlayerAnswers],
     roster: Any | None,
 ) -> str:
-    """
-    Build the LLM system prompt.
-
-    Structure:
-    1. Role declaration
-    2. Genre/tone/structure
-    3. CHARACTER VISUAL IDENTITIES (from roster) — injected early
-    4. Archetypes with narrative roles (separate from visual identities)
-    5. Ingredients with assigned roles
-    6. image_prompt_en rules (comic artwork, no literal text embedding)
-    7. Output format rules
-    """
     panel_count: int = getattr(brief, "panel_count", 5)
     genre_name: str = getattr(brief, "genre", "Telenovelă Românească")
     subgenre: str = getattr(brief, "subgenre", "")
     tone_keywords: list[str] = list(getattr(brief, "tone_keywords", []))
     comedy_level: int = getattr(brief, "comedy_level", 7)
-    visual_style: str = getattr(brief, "visual_style", "")
 
     story_structure = getattr(brief, "story_structure", None)
     beats: list[str] = list(getattr(story_structure, "beats", [])) if story_structure else []
@@ -212,30 +182,27 @@ def _build_system_prompt(
         twist_lines.append(f"  - Panou {idx}: {label} — {desc}")
 
     narrator = getattr(brief, "narrator_personality", None)
-    narrator_desc: str = (
-        getattr(narrator, "personality_description_ro", "") if narrator else ""
-    )
-
+    narrator_desc: str = getattr(narrator, "personality_description_ro", "") if narrator else ""
     archetypes = list(getattr(brief, "archetypes", []))
 
+    # Build English ingredient map for concrete examples
+    ingredient_en_map = _build_ingredient_english_map(player_answers)
+
     parts: list[str] = [
-        "Ești un scenarist român de benzi desenate comice. Scrii scenarii originale, nu șabloane.",
+        "Ești un scenarist român de benzi desenate comice. Scrii scenarii originale.",
         "Povestea ta va fi desenată ca o bandă desenată românească în stil comic book.",
         "",
         f"GEN: {genre_name}",
     ]
     if subgenre:
         parts.append(f"SUBGEN: {subgenre}")
-
     parts += [
         f"NIVEL COMEDIE: {comedy_level}/10",
         f"TON: {', '.join(tone_keywords)}",
         "",
     ]
 
-    # ── CHARACTER VISUAL IDENTITIES — injected early ─────────────────────────
-    # This must come BEFORE archetype narrative roles so the LLM understands
-    # visual identity is separate from story role.
+    # CHARACTER VISUAL IDENTITIES
     if roster is not None:
         roster_section = roster.build_system_prompt_section()
         if roster_section:
@@ -244,128 +211,107 @@ def _build_system_prompt(
                 roster_section,
                 "=" * 60,
                 "",
-                "CRITICAL: The visual descriptions above define how each character LOOKS.",
-                "Use these EXACT visual descriptions in every image_prompt_en.",
-                "Do NOT invent different clothing, hair or features.",
-                "The CHARACTER VISUAL IDENTITY must remain IDENTICAL across all panels.",
+                "CRITICAL: Use EXACTLY these visual descriptions in every image_prompt_en.",
+                "Do NOT change clothing color, hair, or features between panels.",
                 "",
             ]
 
-    # ── Narrative archetypes (story roles, NOT visual descriptions) ───────────
+    # Narrative archetypes
     parts += ["ROLURI NARATIVE (story roles only, NOT visual descriptions):"]
     for arch in archetypes:
         key = getattr(arch, "key", "?")
         name_ro = getattr(arch, "name_ro", key)
         desc_ro = getattr(arch, "description_ro", "")
         nickname = getattr(arch, "player_nickname", "?")
+        parts.append(f"  {nickname} → rol: {name_ro} — {desc_ro}")
         parts.append(
-            f"  {nickname} → rol narativ: {name_ro} — {desc_ro}"
+            f"    In image_prompt_en: call this character '{nickname}' + visual description. "
+            f"NEVER write '{name_ro}' or '{key}' in image descriptions."
         )
-        parts.append(
-            f"    NOTE: '{name_ro}' and '{key}' are STORY ROLES. "
-            f"In image_prompt_en, always refer to this character as '{nickname}' "
-            f"with the visual description from CHARACTER VISUAL IDENTITIES above."
-        )
-
     parts += [""]
 
-    # ── Story structure ───────────────────────────────────────────────────────
-    parts += ["STRUCTURA NARATIVĂ (câte un beat per panou):"]
+    # Story structure
+    parts += ["STRUCTURA NARATIVĂ:"]
     for i, beat in enumerate(beats[:panel_count]):
-        act_hint = ""
+        hint = ""
         if act_descriptions and i == 0:
-            act_hint = f" — {act_descriptions[0]}"
+            hint = f" — {act_descriptions[0]}"
         elif act_descriptions and i == panel_count - 1 and len(act_descriptions) > 1:
-            act_hint = f" — {act_descriptions[-1]}"
-        parts.append(f"  Panou {i}: {beat}{act_hint}")
+            hint = f" — {act_descriptions[-1]}"
+        parts.append(f"  Panou {i}: {beat}{hint}")
 
     if twist_lines:
         parts += ["", "RĂSTURNĂRI OBLIGATORII:"] + twist_lines
-
     if narrator_desc:
         parts += ["", f"NARATORUL: {narrator_desc}"]
 
-    # ── Ingredients with roles ────────────────────────────────────────────────
-    ingredient_sections: list[str] = []
+    # Ingredients with English translation shown explicitly
+    parts += [
+        "",
+        "INGREDIENTE FURNIZATE DE JUCĂTORI:",
+        "IMPORTANT: Tabelul de mai jos arată traducerea exactă în engleză pe care",
+        "trebuie să o folosești în image_prompt_en. NU schimba culorile.",
+        "",
+    ]
     for pa in player_answers:
-        lines: list[str] = [f"Jucător: {pa.nickname} (rol narativ: {pa.archetype_key})"]
+        parts.append(f"Jucător: {pa.nickname} (rol: {pa.archetype_key})")
         for ans in pa.answers:
             role = ans.ingredient_role
             guidance_ro = _ROLE_GUIDANCE_RO.get(role, role)
             visual_guidance = _ROLE_VISUAL_GUIDANCE_EN.get(role, "")
-            line = f"  • ingredient: «{ans.answer_text}» | rol: {role} ({guidance_ro})"
+            en_translation = ingredient_en_map.get(ans.answer_text, ans.answer_text)
+            line = (
+                f"  • «{ans.answer_text}» | rol: {role} ({guidance_ro})\n"
+                f"    → English for image_prompt_en: \"{en_translation}\""
+            )
             if visual_guidance:
-                line += f"\n    VISUAL: {visual_guidance}"
-            lines.append(line)
-        ingredient_sections.append("\n".join(lines))
+                line += f"\n    → Visual: {visual_guidance}"
+            parts.append(line)
 
-    if ingredient_sections:
-        parts += [
-            "",
-            "INGREDIENTE FURNIZATE DE JUCĂTORI:",
-            "REGULĂ CRITICĂ: Integrează fiecare ingredient organic în poveste, conform rolului",
-            "său narativ. Povestea trebuie să fie imposibil de ghicit doar din lista de ingrediente.",
-            "Ingredientul servește povestea — NU forța ingredientele ca umplutură.",
-            "",
-            *ingredient_sections,
-        ]
-
-    # ── image_prompt_en rules ────────────────────────────────────────────────
     parts += [
         "",
+        "REGULĂ CRITICĂ: Integrează fiecare ingredient organic. NU forța ca umplutură.",
+        "NU adăuga obiecte care nu sunt în lista de ingrediente (umbrele, crocodili,",
+        "animale aleatorii etc.) — dacă nu e în lista de mai sus, nu apare în imagine.",
+        "",
+    ]
+
+    # image_prompt_en rules
+    parts += [
         "=" * 60,
         "REGULI PENTRU image_prompt_en:",
         "=" * 60,
         "",
-        "image_prompt_en descrie CE SĂ SE DESENEZE în acel panou.",
-        "Este o specificație vizuală completă pentru un ilustrator de benzi desenate.",
+        "STILUL VIZUAL OBLIGATORIU — fiecare image_prompt_en TREBUIE să înceapă cu:",
+        "  'highly detailed comic book illustration, bold dark ink outlines,",
+        "  exaggerated expressive characters, vibrant saturated colors, dramatic lighting,'",
         "",
-        "STILUL VIZUAL OBLIGATORIU:",
-        "Fiecare image_prompt_en trebuie să înceapă cu:",
-        "  'highly detailed comic book illustration, bold dark ink outlines, "
-        "exaggerated expressive characters, vibrant saturated colors, dramatic lighting,'",
-        "Apoi continuă cu descrierea scenei specifice.",
+        "CONȚINUT — pentru fiecare panou:",
+        "1. ENGLISH ONLY. ASCII ONLY. No Romanian.",
+        "2. Descrie acțiunea specifică care se întâmplă.",
+        "3. Numește fiecare personaj prin NICKNAME + descriere vizuală din CHARACTER VISUAL IDENTITIES.",
+        "4. INGREDIENT COMPLETENESS — OBLIGATORIU înainte de a scrie image_prompt_en:",
+        "   a) Citește description_ro al acestui panou.",
+        "   b) Identifică ingredientele din lista de mai sus care apar în description_ro.",
+        "   c) Copiază traducerea EXACTĂ din coloana 'English for image_prompt_en'.",
+        "      Exemplu: dacă apare 'bicicletă mov' → scrie 'purple bicycle' (nu 'blue bicycle').",
+        "   d) NU adăuga obiecte care nu sunt în lista de ingrediente.",
+        "5. LOCAȚIE: descrie mediul vizual (Venice canal, cobblestone street, etc.).",
+        "6. FĂRĂ TEXT IN IMAGINE: nu descrie speech bubbles, captions, text.",
+        "   Textul e adăugat separat de sistemul de prezentare.",
         "",
-        "REGULI DE CONȚINUT:",
-        "1. ENGLISH ONLY. ASCII ONLY. No Romanian diacritics.",
-        "2. Describe the SPECIFIC ACTION happening in the panel.",
-        "3. Name each character by their NICKNAME and describe their appearance",
-        "   using EXACTLY the visual identity from CHARACTER VISUAL IDENTITIES.",
-        "   Example: 'Ana (mid-30s, short dark brown hair, vibrant red outfit, "
-        "large round glasses) stands looking shocked'",
-        "4. Every OBJECT ingredient visible in this panel must be explicitly described.",
-        "   Include COLOR if the ingredient has one (e.g. 'bright red umbrella', not just 'umbrella').",
-        "5. LOCATION ingredients must appear as the environment/background.",
-        "6. ATMOSPHERE/CONCEPT ingredients must be shown through:",
-        "   - Character expressions and body language",
-        "   - Environmental effects (lighting, weather, chaos)",
-        "   - Visual metaphors",
-        "   Example: 'gelozie' → 'character with narrowed suspicious eyes, "
-        "clenched fists, watching another character jealously'",
-        "7. Do NOT embed literal text into the scene description.",
-        "   The narration and dialogue will be added as overlays separately.",
-        "   Do NOT say 'speech bubble saying...' or 'text reading...'",
-        "   Simply describe what is VISUALLY HAPPENING.",
-        "8. The panel should feel like a dynamic, expressive comic book panel.",
-        "",
-        "ARCHETYPE RULE:",
-        "NEVER use archetype names (Expertul, Victima, Scepticul, etc.) as visual descriptions.",
-        "Use the character's NICKNAME and their visual identity description instead.",
-        "",
-        "INGREDIENT COMPLETENESS CHECK (do this before writing each image_prompt_en):",
-        "  For each panel, ask: which ingredients appear in this panel's description_ro?",
-        "  Every such ingredient MUST appear in image_prompt_en explicitly.",
-        "  OBJECT ingredients must be named with their full description including color.",
-        "  At least one panel must show EVERY ingredient from the full list.",
+        "ARCHETYPE RULE: NICIODATĂ nu folosi nume de arhetipuri ca descrieri vizuale.",
+        "Exemplu GREȘIT: 'the Skeptic looks skeptical'",
+        "Exemplu CORECT: 'Ana, wearing vibrant red outfit and long colourful scarf,",
+        "  leans forward with narrowed eyes and crossed arms'",
         "",
         "REGULI GENERALE:",
-        "1. Scrie în română pentru description_ro, dialogue_ro, narrator_line_ro.",
-        "2. image_prompt_en: ENGLISH ONLY, ASCII ONLY.",
-        "3. Fiecare description_ro trebuie să aibă minimum 20 de cuvinte.",
-        "4. Toate numele jucătorilor trebuie să apară în text.",
-        "5. Răspunde EXCLUSIV cu un obiect JSON valid. Fără text înainte sau după JSON.",
-        "6. NU genera câmpurile narrator_script și image_prompts la nivel de root.",
-        "   Generează DOAR câmpul panels[] cu toate sub-câmpurile.",
+        "- description_ro, dialogue_ro, narrator_line_ro: ROMÂNĂ.",
+        "- image_prompt_en: ENGLISH ONLY, ASCII ONLY.",
+        "- description_ro: minimum 20 cuvinte.",
+        "- Toate nickname-urile jucătorilor trebuie să apară în text.",
+        "- Răspunde EXCLUSIV cu JSON valid. Fără text înainte sau după.",
+        "- NU genera narrator_script sau image_prompts la root level.",
     ]
 
     return "\n".join(parts)
@@ -374,111 +320,115 @@ def _build_system_prompt(
 def _build_user_prompt(
     panel_count: int,
     player_names: list[str],
+    player_answers: list[PlayerAnswers],
     prior_errors: list[str],
 ) -> str:
-    """Build the user turn requesting JSON output."""
-    schema_example = _build_json_schema_example(panel_count)
-
+    schema_example = _build_json_schema_example(panel_count, player_answers)
     lines: list[str] = []
 
     if prior_errors:
         lines += [
-            "Încercarea anterioară a eșuat validarea cu aceste erori:",
+            "Încercarea anterioară a eșuat validarea:",
             *[f"  - {e}" for e in prior_errors],
-            "Corectează aceste probleme în noul răspuns.",
+            "Corectează aceste probleme.",
             "",
         ]
 
     names_str = ", ".join(player_names) if player_names else "(niciun jucător)"
     lines += [
         f"Scrie o poveste comică de bandă desenată cu exact {panel_count} panouri.",
-        f"OBLIGATORIU: Numele acestor jucători trebuie să apară explicit în text: {names_str}.",
-        "Fiecare ingredient trebuie integrat organic conform rolului său narativ.",
+        f"Personajele sunt: {names_str}.",
+        "Fiecare ingredient trebuie integrat organic.",
         "",
-        "PENTRU FIECARE PANOU — image_prompt_en TREBUIE să:",
-        "1. Înceapă cu stilul comic: 'highly detailed comic book illustration, bold dark ink outlines,'",
-        "2. Descrie personajele prin nume și aspect vizual (din CHARACTER VISUAL IDENTITIES).",
-        "3. Descrie explicit fiecare ingredient vizibil în acel panou.",
-        "4. Fie o propoziție completă în engleză, nu o listă de cuvinte cheie.",
+        "PENTRU FIECARE image_prompt_en:",
+        "1. Începe cu: 'highly detailed comic book illustration, bold dark ink outlines,'",
+        "2. Descrie personajele prin nickname + aspect vizual exact.",
+        "3. Include EXACT traducerile din lista de ingrediente (cu culorile corecte).",
+        "4. NU adăuga obiecte care nu sunt în lista de ingrediente.",
         "",
-        "Răspunde EXCLUSIV cu un obiect JSON cu această structură exactă:",
+        "JSON:",
         "",
         schema_example,
     ]
-
     return "\n".join(lines)
 
 
-def _build_json_schema_example(panel_count: int) -> str:
-    """Build a concrete JSON schema example to guide the LLM output."""
+def _build_json_schema_example(
+    panel_count: int,
+    player_answers: list[PlayerAnswers],
+) -> str:
+    """Build schema example using actual ingredient translations as examples."""
+    from .ingredient_enforcer import _translate_ingredient
+
+    # Collect actual ingredient English translations
+    ingredient_examples: list[str] = []
+    for pa in player_answers:
+        for ans in pa.answers[:1]:  # just first ingredient of each player for example
+            en, color, obj = _translate_ingredient(ans.answer_text, ans.ingredient_role)
+            if color and obj:
+                ingredient_examples.append(f"{color} {obj}")
+            else:
+                ingredient_examples.append(en)
+
+    example_objects = ", ".join(ingredient_examples) if ingredient_examples else "specific ingredient"
+
     panels = []
     for i in range(panel_count):
         if i == 0:
+            # First panel: show concrete example with actual ingredients
             example_prompt = (
                 "highly detailed comic book illustration, bold dark ink outlines, "
                 "exaggerated expressive characters, vibrant saturated colors, dramatic lighting, "
-                "Ana (mid-30s, short dark brown hair, vibrant red outfit, large round glasses) "
-                "stands in a grand hall holding a bright golden key, her expression shocked, "
-                "wide eyes, mouth open, while Bogdan (late 20s, curly black hair, deep blue outfit, "
-                "thick black moustache) watches from behind a purple bicycle propped against the wall, "
-                "jealous expression with narrowed eyes and clenched fists, "
-                "Venice canal visible through arched windows in background, "
-                "warm dramatic lighting, strong contrast, detailed architectural environment"
+                f"[Character1Name] (early 30s, [hair], wearing [clothing color] outfit, [feature]) "
+                f"holding a {example_objects}, shocked expression, wide eyes, "
+                "[Character2Name] ([age], [hair], wearing [clothing color] outfit, [feature]) "
+                "watching with raised eyebrows, "
+                "[environment description], dramatic lighting, strong contrast"
             )
         else:
             example_prompt = (
-                f"highly detailed comic book illustration, bold dark ink outlines, "
-                f"exaggerated expressive characters, vibrant saturated colors, dramatic lighting, "
-                f"[describe specific scene for panel {i}: which characters are present with their "
-                f"visual appearance, what action is happening, which ingredients are visible "
-                f"and how, what is the environment/location, camera angle and composition]"
+                "highly detailed comic book illustration, bold dark ink outlines, "
+                "exaggerated expressive characters, vibrant saturated colors, dramatic lighting, "
+                f"[describe panel {i} scene with character nicknames, visual appearances, "
+                f"specific ingredients with exact colors, environment, camera angle]"
             )
         panels.append({
             "panel_index": i,
-            "description_ro": f"[Descriere scenă panou {i}, minimum 20 cuvinte, ROMÂNĂ]",
-            "dialogue_ro": f"[Dialog panou {i} în română, sau șir gol dacă nu e dialog]",
+            "description_ro": f"[Descriere scenă panou {i}, minimum 20 cuvinte]",
+            "dialogue_ro": f"[Dialog panou {i} sau șir gol]",
             "image_prompt_en": example_prompt,
-            "narrator_line_ro": f"[Linia naratorului panou {i}, în ROMÂNĂ]",
-            "characters_in_panel": ["[archetype_key_of_character_1]", "[archetype_key_of_character_2]"],
+            "narrator_line_ro": f"[Linia naratorului panou {i}]",
+            "characters_in_panel": ["[archetype_key_1]", "[archetype_key_2]"],
         })
 
     schema: dict[str, Any] = {
-        "title": "[Titlul poveștii în română]",
+        "title": "[Titlul poveștii]",
         "panels": panels,
     }
     return json.dumps(schema, ensure_ascii=False, indent=2)
 
 
 def _extract_ingredients_from_system_prompt(system_prompt: str) -> list[str]:
-    """Extract ingredient answer texts from a system prompt."""
     import re
     return re.findall(r"«([^»]+)»", system_prompt)
 
 
-# ── Response parser ───────────────────────────────────────────────────────────
-
 def _parse_story_response(response_text: str, panel_count: int) -> Story:
-    """Extract and parse the JSON object from the LLM response text."""
     text = response_text.strip()
-
     data = _try_parse_json(text)
-
     if data is None:
         stripped = _strip_code_fence(text)
         if stripped:
             data = _try_parse_json(stripped)
-
     if data is None:
         extracted = _extract_json_object(text)
         if extracted:
             data = _try_parse_json(extracted)
-
     if data is None:
         raise ValueError(
             f"Could not extract valid JSON from LLM response. "
             f"First 200 chars: {text[:200]!r}"
         )
-
     return _dict_to_story(data, panel_count)
 
 
@@ -495,9 +445,7 @@ def _try_parse_json(text: str) -> dict[str, Any] | None:
 def _strip_code_fence(text: str) -> str | None:
     import re
     match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text, re.IGNORECASE)
-    if match:
-        return match.group(1).strip()
-    return None
+    return match.group(1).strip() if match else None
 
 
 def _extract_json_object(text: str) -> str | None:
@@ -509,15 +457,13 @@ def _extract_json_object(text: str) -> str | None:
 
 
 def _dict_to_story(data: dict[str, Any], panel_count: int) -> Story:
-    """Convert a parsed JSON dict to a Story dataclass."""
-    required_core = ["title", "panels"]
-    missing = [f for f in required_core if f not in data]
+    required = ["title", "panels"]
+    missing = [f for f in required if f not in data]
     if missing:
         raise ValueError(f"LLM response missing required Story fields: {missing}")
 
     raw_panels: list[dict[str, Any]] = data["panels"]
     panels: list[PanelDescription] = []
-
     for i, p in enumerate(raw_panels):
         panels.append(PanelDescription(
             panel_index=int(p.get("panel_index", i)),
@@ -528,7 +474,6 @@ def _dict_to_story(data: dict[str, Any], panel_count: int) -> Story:
             characters_in_panel=list(p.get("characters_in_panel", [])),
         ))
 
-    # Always reconstruct narrator_script and image_prompts from panels.
     narrator_script = [p.narrator_line_ro for p in panels]
     image_prompts = [p.image_prompt_en for p in panels]
 
