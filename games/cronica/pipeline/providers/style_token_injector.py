@@ -30,6 +30,7 @@ from ..creative_director.models import PresentationFormat
 # Matches the reference image: bold Romanian comic-book illustration.
 #
 _GLOBAL_STYLE_POSITIVE: list[str] = [
+    "Bradhamel art style",
     "comic book illustration",
     "bold ink outlines",
     "exaggerated expressive characters",
@@ -41,7 +42,6 @@ _GLOBAL_STYLE_POSITIVE: list[str] = [
     "professional comic book art",
     "sharp clean lines",
     "graphic novel style",
-    "8k resolution",
 ]
 
 # Negative tokens:

@@ -109,9 +109,10 @@ class OllamaStoryLLM(StoryLLMProvider):
             "model": self.model,
             "stream": False,
             "options": {
-                "temperature": 0.85,
+                "temperature": 0.7,
                 "top_p": 0.9,
                 "num_predict": 4096,
+                "stop": [],
             },
             "messages": [
                 {"role": "system", "content": system_prompt},
@@ -310,8 +311,18 @@ def _build_system_prompt(
         "- image_prompt_en: ENGLISH ONLY, ASCII ONLY.",
         "- description_ro: minimum 20 cuvinte.",
         "- Toate nickname-urile jucătorilor trebuie să apară în text.",
-        "- Răspunde EXCLUSIV cu JSON valid. Fără text înainte sau după.",
         "- NU genera narrator_script sau image_prompts la root level.",
+        "",
+        "=" * 60,
+        "CRITICAL OUTPUT RULE — READ THIS LAST:",
+        "=" * 60,
+        "Your ENTIRE response must be a single JSON object.",
+        "Start your response with { and end with }.",
+        "Do NOT write any text before the {.",
+        "Do NOT write any text after the }.",
+        "Do NOT write 'Aici este', 'Iată', 'Titlul poveștii', or ANY prose.",
+        "Do NOT use markdown. Do NOT use ** or * or bullet points.",
+        "ONLY output raw JSON. Nothing else. Not even a single word outside the JSON.",
     ]
 
     return "\n".join(parts)
@@ -346,7 +357,9 @@ def _build_user_prompt(
         "3. Include EXACT traducerile din lista de ingrediente (cu culorile corecte).",
         "4. NU adăuga obiecte care nu sunt în lista de ingrediente.",
         "",
-        "JSON:",
+        "IMPORTANT: Your entire response must be ONLY the JSON object below.",
+        "Do not write anything before or after the JSON.",
+        "Do not explain. Do not add titles. Start with { immediately.",
         "",
         schema_example,
     ]

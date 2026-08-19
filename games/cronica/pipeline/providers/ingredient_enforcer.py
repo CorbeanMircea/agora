@@ -292,7 +292,11 @@ def _translate_ingredient(answer_ro: str, role: str) -> tuple[str, str | None, s
         else:
             english_parts.append(word)
 
-    english_desc = " ".join(english_parts) if english_parts else answer_ro
+        # Ensure correct English adjective order: color before object
+    if color_en and object_en:
+        english_desc = f"{color_en} {object_en}"
+    else:
+        english_desc = " ".join(english_parts) if english_parts else answer_ro
 
     if role == "LOCATION" and object_en is None and color_en is None:
         english_desc = f"{english_desc} setting"
