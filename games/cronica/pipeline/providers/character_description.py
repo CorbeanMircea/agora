@@ -49,13 +49,13 @@ _HAIR_STYLES: list[str] = [
 # Distinguishing features — deterministic from archetype key hash
 _DISTINGUISHING_FEATURES: list[str] = [
     "wearing large round glasses",
-    "with a thick black moustache",
-    "with a long colourful scarf",
+    "with a long colourful scarf wrapped around neck",
     "with very thick expressive eyebrows",
-    "wearing a distinctive hat",
-    "with a small beard and intense eyes",
+    "wearing a distinctive wide-brimmed hat",
     "with large hoop earrings",
-    "with a prominent chin and confident posture",
+    "with a prominent jaw and confident posture",
+    "wearing a vintage leather jacket",
+    "with freckles across the nose and cheeks",
 ]
 
 # Approximate ages — deterministic from player id hash

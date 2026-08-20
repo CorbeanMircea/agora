@@ -49,15 +49,15 @@ SDXL_CHECKPOINT: str = os.getenv(
 )
 COMIC_LORA_NAME: str = os.getenv(
     "COMIC_LORA_NAME",
-    "Romain_Bonnet_E10.safetensors",
+    "EldritchComicsXL1.2.safetensors",
 )
-COMIC_LORA_STRENGTH: float = float(os.getenv("COMIC_LORA_STRENGTH", "0.6"))
+COMIC_LORA_STRENGTH: float = float(os.getenv("COMIC_LORA_STRENGTH", "0.8"))
 
 IPADAPTER_MODEL: str = os.getenv("IPADAPTER_MODEL", "ip-adapter_sdxl.bin")
-IPADAPTER_WEIGHT: float = float(os.getenv("IPADAPTER_WEIGHT", "0.5"))
+IPADAPTER_WEIGHT: float = float(os.getenv("IPADAPTER_WEIGHT", "0.25"))
 
 SDXL_STEPS: int = int(os.getenv("SDXL_STEPS", "30"))
-SDXL_CFG: float = float(os.getenv("SDXL_CFG", "7.0"))
+SDXL_CFG: float = float(os.getenv("SDXL_CFG", "9.0"))
 
 GENERATION_TIMEOUT: float = float(os.getenv("COMFYUI_TIMEOUT", "300"))
 POLL_INTERVAL: float = 2.0
@@ -191,11 +191,18 @@ class FluxImageGenerator:
                 "class_type": "CheckpointLoaderSimple",
                 "inputs": {"ckpt_name": self.checkpoint},
             },
+            "1b": {
+                "class_type": "CLIPSetLastLayer",
+                "inputs": {
+                    "clip": ["1", 1],
+                    "stop_at_clip_layer": -2,
+                },
+            },
             "2": {
                 "class_type": "LoraLoader",
                 "inputs": {
                     "model": ["1", 0],
-                    "clip": ["1", 1],
+                    "clip": ["1b", 0],
                     "lora_name": self.lora_name,
                     "strength_model": self.lora_strength,
                     "strength_clip": self.lora_strength,
@@ -259,19 +266,19 @@ class FluxImageGenerator:
     ) -> dict[str, Any]:
         """
         Panels 2-5: SDXL + Comic LoRA + IP-Adapter.
-        ref_filename is the name returned by ComfyUI after uploading panel 1.
-        Uses standard LoadImage node (built into ComfyUI core).
+        Loads clip_vision explicitly and passes it directly to IPAdapter.
+        IPAdapterModelLoader loads the ipadapter weights separately.
         """
         seed = int(time.time() * 1000) % (2 ** 32)
         filename_prefix = output_path.stem
 
         return {
-            # Load SDXL checkpoint
+            # 1. Load SDXL checkpoint
             "1": {
                 "class_type": "CheckpointLoaderSimple",
                 "inputs": {"ckpt_name": self.checkpoint},
             },
-            # Apply Comic LoRA
+            # 2. Apply Comic LoRA
             "2": {
                 "class_type": "LoraLoader",
                 "inputs": {
@@ -282,17 +289,17 @@ class FluxImageGenerator:
                     "strength_clip": self.lora_strength,
                 },
             },
-            # Load IP-Adapter model
+            # 3. Load IP-Adapter weights
             "3": {
                 "class_type": "IPAdapterModelLoader",
                 "inputs": {"ipadapter_file": self.ipadapter_model},
             },
-            # Load CLIP vision encoder
+            # 4. Load CLIP vision encoder explicitly
             "4": {
                 "class_type": "CLIPVisionLoader",
-                "inputs": {"clip_name": "clip_vision_g.safetensors"},
+                "inputs": {"clip_name": "CLIP-ViT-bigG-14-laion2B-39B-b160k.safetensors"},
             },
-            # Load reference image — standard ComfyUI core node
+            # 5. Load reference image
             "5": {
                 "class_type": "LoadImage",
                 "inputs": {
@@ -300,23 +307,23 @@ class FluxImageGenerator:
                     "upload": "image",
                 },
             },
-            # Apply IP-Adapter conditioning
+            # 6. Apply IP-Adapter with explicit clip_vision
             "6": {
-                "class_type": "IPAdapter",
+                "class_type": "IPAdapterAdvanced",
                 "inputs": {
                     "model": ["2", 0],
                     "ipadapter": ["3", 0],
                     "image": ["5", 0],
                     "clip_vision": ["4", 0],
                     "weight": self.ipadapter_weight,
-                    "noise": 0.0,
-                    "weight_type": "standard",
+                    "weight_type": "linear",
+                    "combine_embeds": "concat",
                     "start_at": 0.0,
                     "end_at": 1.0,
-                    "unfold_batch": False,
+                    "embeds_scaling": "V only",
                 },
             },
-            # Positive conditioning
+            # 7. Positive conditioning
             "7": {
                 "class_type": "CLIPTextEncode",
                 "inputs": {
@@ -324,7 +331,7 @@ class FluxImageGenerator:
                     "clip": ["2", 1],
                 },
             },
-            # Negative conditioning
+            # 8. Negative conditioning
             "8": {
                 "class_type": "CLIPTextEncode",
                 "inputs": {
@@ -332,12 +339,12 @@ class FluxImageGenerator:
                     "clip": ["2", 1],
                 },
             },
-            # Empty latent
+            # 9. Empty latent
             "9": {
                 "class_type": "EmptyLatentImage",
                 "inputs": {"width": 1024, "height": 1024, "batch_size": 1},
             },
-            # KSampler with IP-Adapter conditioned model
+            # 10. KSampler
             "10": {
                 "class_type": "KSampler",
                 "inputs": {
@@ -353,7 +360,7 @@ class FluxImageGenerator:
                     "denoise": 1.0,
                 },
             },
-            # VAE Decode
+            # 11. VAE Decode
             "11": {
                 "class_type": "VAEDecode",
                 "inputs": {
@@ -361,7 +368,7 @@ class FluxImageGenerator:
                     "vae": ["1", 2],
                 },
             },
-            # Save image
+            # 12. Save image
             "12": {
                 "class_type": "SaveImage",
                 "inputs": {
@@ -376,7 +383,8 @@ class FluxImageGenerator:
     def _submit_and_wait(self, workflow: dict[str, Any], output_path: Path) -> None:
         client_id = str(uuid.uuid4())
         prompt_id = self._queue_prompt(workflow, client_id)
-        self._wait_for_completion(prompt_id)
+        output_filename = self._wait_for_completion(prompt_id)
+        self._copy_output(output_filename, output_path)
 
     def _queue_prompt(self, workflow: dict[str, Any], client_id: str) -> str:
         payload = {"prompt": workflow, "client_id": client_id}
@@ -392,7 +400,8 @@ class FluxImageGenerator:
         log.debug("Queued prompt_id=%s", prompt_id)
         return prompt_id
 
-    def _wait_for_completion(self, prompt_id: str) -> None:
+    def _wait_for_completion(self, prompt_id: str) -> str:
+        """Poll /history until complete. Returns the generated filename."""
         deadline = time.monotonic() + GENERATION_TIMEOUT
         url = f"{self.base_url}/history/{prompt_id}"
 
@@ -404,13 +413,36 @@ class FluxImageGenerator:
                     resp.raise_for_status()
                 data = resp.json()
                 if prompt_id in data:
-                    status = data[prompt_id].get("status", {})
-                    if status.get("completed", False):
-                        return
+                    entry = data[prompt_id]
+                    status = entry.get("status", {})
                     if status.get("status_str") == "error":
                         messages = status.get("messages", [])
                         raise RuntimeError(f"ComfyUI error: {messages}")
+                    if status.get("completed", False):
+                        # Extract the saved filename from outputs
+                        outputs = entry.get("outputs", {})
+                        for node_id, node_output in outputs.items():
+                            images = node_output.get("images", [])
+                            if images:
+                                return images[0]["filename"]
+                        raise RuntimeError("ComfyUI completed but no output image found in history")
             except httpx.HTTPError as exc:
                 log.warning("Poll failed: %s", exc)
 
         raise TimeoutError(f"ComfyUI did not complete within {GENERATION_TIMEOUT}s")
+
+    def _copy_output(self, comfyui_filename: str, dest_path: Path) -> None:
+        """
+        Download the generated image from ComfyUI's /view endpoint
+        and save it to the pipeline's output path.
+        """
+        url = f"{self.base_url}/view"
+        params = {"filename": comfyui_filename, "type": "output"}
+
+        with httpx.Client(timeout=60) as client:
+            resp = client.get(url, params=params)
+            resp.raise_for_status()
+
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        dest_path.write_bytes(resp.content)
+        log.info("Saved panel image to %s (%d bytes)", dest_path, len(resp.content))

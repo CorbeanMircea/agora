@@ -146,7 +146,7 @@ print("=" * 60)
 brief: CreativeBrief = CreativeDirector().generate(
     player_answers_raw,
     [],
-    seed=42,
+    seed=7,
 )
 
 print(f"Genre:       {brief.genre}")

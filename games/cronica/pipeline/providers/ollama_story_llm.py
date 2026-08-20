@@ -1,14 +1,11 @@
 """
 M4.4 / M4.5 — OllamaStoryLLM
 
-Calls Ollama (Llama 3.1 8B) to generate a structured Romanian comic story.
+Cinematic story generation with fully dynamic adaptation to player inputs.
+No hardcoded Romanian words, ingredient names, or panel counts.
 
-Key principles (ADR-001):
-- Character visual identities injected from CharacterRoster.
-- Ingredients presented with roles — model must integrate organically.
-- image_prompt_en is a visual scene spec: concrete, English, ASCII-only.
-- No "no text" instruction in image_prompt_en — negative prompts handle that.
-- Archetype names are narrative roles only, never visual descriptions.
+Priority 3 fix: LLM schema example uses actual character sheet data
+so the model generates correct appearance descriptions from the start.
 """
 
 from __future__ import annotations
@@ -31,8 +28,8 @@ from .story_llm_provider import (
 log = logging.getLogger("ollama_story_llm")
 
 OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
-OLLAMA_TIMEOUT_SECS: float = float(os.getenv("OLLAMA_TIMEOUT_SECS", "60"))
+OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "mistral-nemo:12b")
+OLLAMA_TIMEOUT_SECS: float = float(os.getenv("OLLAMA_TIMEOUT_SECS", "120"))
 
 _ROLE_GUIDANCE_RO: dict[str, str] = {
     "CHARACTER":  "un personaj, ființă sau entitate care poate acționa",
@@ -45,27 +42,136 @@ _ROLE_GUIDANCE_RO: dict[str, str] = {
     "ATMOSPHERE": "o calitate senzorială, emoție sau ton care colorează scena",
 }
 
-_ROLE_VISUAL_GUIDANCE_EN: dict[str, str] = {
-    "ATMOSPHERE": (
-        "Show through VISIBLE SIGNS: facial expressions, body language, "
-        "environmental effects, lighting. Example: 'fear' → wide eyes, defensive posture, "
-        "cold sweat; 'jealousy' → glaring with clenched fists."
-    ),
-    "CONCEPT": "Translate into a VISUAL SITUATION or physical metaphor.",
-    "ACTION": "Show the action HAPPENING — capture the motion and consequence.",
-}
+_KINETIC_VERBS_EXAMPLES = (
+    "crashes, grabs, flees, shoves, launches, tumbles, dodges, spins, "
+    "slams, leaps, sprints, snatches, collides, throws, catches, yanks, "
+    "careens, stumbles, tackles, swings, lunges, topples, skids, hurls, "
+    "bolts, plunges, wrenches, flings, barrels, explodes, loses control, "
+    "careens toward, slams into, flailing, diving, skidding"
+)
 
-# English translations for common Romanian ingredients
-# Used to build concrete examples in the schema
-_INGREDIENT_TRANSLATIONS: dict[str, str] = {
-    "bicicletă mov": "purple bicycle",
-    "papagal albastru": "blue parrot",
-    "cheie aurie": "golden key",
-    "umbrelă roșie": "red umbrella",
-    "tort de ziua de naștere": "birthday cake",
-    "frică": "fear (shown as trembling hands, wide eyes, defensive crouch)",
-    "gelozie": "jealousy (shown as narrowed eyes, clenched jaw, suspicious glare)",
-}
+_BANNED_VERBS = (
+    "stands, stand, standing, sits, sit, sitting, looks, look, looking, "
+    "holds, hold, holding, walks, walk, walking, talks, talk, talking, "
+    "watches, watch, watching, waits, wait, waiting, poses, pose, posing"
+)
+
+_CAMERA_ANGLE_POOL: list[str] = [
+    (
+        "extreme low angle shot, worm's eye view, "
+        "character looms large against dramatic sky, "
+        "ground-level perspective creates imposing scale"
+    ),
+    (
+        "Dutch angle tilted frame, diagonal composition, "
+        "sense of instability and impending chaos, "
+        "strong diagonal lines cutting through background"
+    ),
+    (
+        "extreme tight close-up filling entire frame, "
+        "face and hands only, extreme facial detail, "
+        "background completely cropped — only subject visible"
+    ),
+    (
+        "extreme wide establishing shot, "
+        "characters appear tiny against massive environment, "
+        "strong foreground element partially blocks view, creating depth"
+    ),
+    (
+        "over-the-shoulder shot, "
+        "dominant character fills left third of frame from behind, "
+        "second character reacts in background right third"
+    ),
+    (
+        "bird's eye view looking straight down, "
+        "characters seen from above, "
+        "environment becomes abstract pattern below them"
+    ),
+    (
+        "extreme close-up on a single object in sharp focus, "
+        "characters blurred in background reacting, "
+        "object fills center of frame"
+    ),
+    (
+        "low three-quarter angle, "
+        "character caught mid-action at dynamic diagonal, "
+        "motion blur on moving elements, "
+        "strong foreground shadow"
+    ),
+]
+
+
+def _get_camera_angle(panel_index: int, panel_count: int) -> str:
+    if panel_index == 0:
+        return _CAMERA_ANGLE_POOL[0]
+    if panel_index == panel_count - 1:
+        return _CAMERA_ANGLE_POOL[3]
+    middle_pool = [_CAMERA_ANGLE_POOL[i] for i in [1, 2, 4, 5, 6, 7]]
+    middle_index = (panel_index - 1) % len(middle_pool)
+    return middle_pool[middle_index]
+
+
+def _build_causality_beat(
+    panel_index: int,
+    panel_count: int,
+    all_ingredient_phrases: list[str],
+) -> dict[str, str]:
+    ingredient_list = ", ".join(f"«{p}»" for p in all_ingredient_phrases)
+    position = panel_index / max(panel_count - 1, 1)
+
+    if panel_index == 0:
+        return {
+            "label": "DECLANȘATOR",
+            "instruction": (
+                f"Unul dintre aceste ingrediente declanșează o criză neașteptată: {ingredient_list}. "
+                "Ceva merge prost SAU se întâmplă ceva imposibil. "
+                "NU o introducere liniștită — începe în mijlocul haosului. "
+                "Ingredientul CAUZEAZĂ situația, nu este doar prezent."
+            ),
+        }
+
+    if panel_index == panel_count - 1:
+        return {
+            "label": "REZOLUȚIE ABSURDĂ",
+            "instruction": (
+                f"Rezoluție care referențiază TOATE ingredientele vizual: {ingredient_list}. "
+                "Personajele sunt acum într-o relație nouă cu obiectele și unele cu altele. "
+                "Final amuzant — cel puțin un detaliu vizual absurd care nu ar fi posibil "
+                "fără combinația exactă de ingrediente."
+            ),
+        }
+
+    if position <= 0.35:
+        return {
+            "label": "REACȚIE",
+            "instruction": (
+                f"Un personaj face o alegere fizică disperată DIN CAUZA crizei din panoul anterior. "
+                f"Legătură cauzală directă — fără salt în timp. "
+                f"Acțiunile lor implică unul din: {ingredient_list}. "
+                "Fug, apucă, urmăresc, confruntă sau încearcă ceva disperat."
+            ),
+        }
+
+    if position <= 0.65:
+        return {
+            "label": "ESCALADARE",
+            "instruction": (
+                f"Consecința acțiunii anterioare înrăutățește totul. "
+                f"Un al doilea ingredient din {ingredient_list} intră și complică situația. "
+                "Mai multe personaje implicate, mediu mai mare, mize mai mari. "
+                "Haosul se înmulțește exponențial."
+            ),
+        }
+
+    return {
+        "label": "RĂSTURNARE",
+        "instruction": (
+            f"O utilizare neașteptată a unui ingredient din {ingredient_list} schimbă totul. "
+            "Ceva care părea o problemă devine soluția — sau invers. "
+            "Panoul cel mai dinamic vizual — surpriză maximă. "
+            "Ingredientul face ceva ce nu ar trebui să fie posibil."
+        ),
+    }
 
 
 class OllamaStoryLLM(StoryLLMProvider):
@@ -93,6 +199,7 @@ class OllamaStoryLLM(StoryLLMProvider):
             panel_count=panel_count,
             player_names=player_names,
             player_answers=player_answers,
+            roster=roster,
             prior_errors=getattr(self, "_last_validation_errors", []),
         )
 
@@ -101,7 +208,6 @@ class OllamaStoryLLM(StoryLLMProvider):
         t0 = time.monotonic()
         response_text = self._call_ollama(system_prompt, user_prompt)
         log.info("Ollama responded in %.1fs", time.monotonic() - t0)
-
         return _parse_story_response(response_text, panel_count)
 
     def _call_ollama(self, system_prompt: str, user_prompt: str) -> str:
@@ -109,10 +215,9 @@ class OllamaStoryLLM(StoryLLMProvider):
             "model": self.model,
             "stream": False,
             "options": {
-                "temperature": 0.7,
-                "top_p": 0.9,
-                "num_predict": 4096,
-                "stop": [],
+                "temperature": 0.9,
+                "top_p": 0.92,
+                "num_predict": 6000,
             },
             "messages": [
                 {"role": "system", "content": system_prompt},
@@ -126,9 +231,12 @@ class OllamaStoryLLM(StoryLLMProvider):
         data = resp.json()
         if "eval_count" in data:
             log.info("Tokens — prompt: %s, eval: %s",
-                     data.get("prompt_eval_count", "?"), data.get("eval_count", "?"))
+                     data.get("prompt_eval_count", "?"),
+                     data.get("eval_count", "?"))
         return data["message"]["content"]
 
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _build_roster_from_brief(brief: Any):
     try:
@@ -139,21 +247,31 @@ def _build_roster_from_brief(brief: Any):
         return None
 
 
-def _build_ingredient_english_map(player_answers: list[PlayerAnswers]) -> dict[str, str]:
-    """
-    Build a map of Romanian ingredient → English equivalent for all ingredients.
-    Used to give the LLM concrete translation examples in the prompt.
-    """
+def _build_ingredient_english_map(
+    player_answers: list[PlayerAnswers],
+) -> dict[str, str]:
     from .ingredient_enforcer import _translate_ingredient
-    result = {}
+    result: dict[str, str] = {}
     for pa in player_answers:
         for ans in pa.answers:
-            en, color, obj = _translate_ingredient(ans.answer_text, ans.ingredient_role)
-            if color and obj:
-                result[ans.answer_text] = f"{color} {obj}"
-            else:
-                result[ans.answer_text] = en
+            en, color, obj = _translate_ingredient(
+                ans.answer_text, ans.ingredient_role
+            )
+            result[ans.answer_text] = (
+                f"{color} {obj}" if (color and obj) else en
+            )
     return result
+
+
+def _collect_all_ingredient_phrases(
+    player_answers: list[PlayerAnswers],
+    ingredient_en_map: dict[str, str],
+) -> list[str]:
+    return [
+        ans.answer_text
+        for pa in player_answers
+        for ans in pa.answers
+    ]
 
 
 def _build_system_prompt(
@@ -167,12 +285,6 @@ def _build_system_prompt(
     tone_keywords: list[str] = list(getattr(brief, "tone_keywords", []))
     comedy_level: int = getattr(brief, "comedy_level", 7)
 
-    story_structure = getattr(brief, "story_structure", None)
-    beats: list[str] = list(getattr(story_structure, "beats", [])) if story_structure else []
-    act_descriptions: list[str] = (
-        list(getattr(story_structure, "act_descriptions", [])) if story_structure else []
-    )
-
     twists = list(getattr(brief, "twists", []))
     twist_lines: list[str] = []
     for tw in twists:
@@ -180,18 +292,23 @@ def _build_system_prompt(
         desc = getattr(tw, "description_ro", "")
         is_final = getattr(tw, "is_final_twist", False)
         label = "RĂSTURNARE FINALĂ" if is_final else "COMPLICAȚIE"
-        twist_lines.append(f"  - Panou {idx}: {label} — {desc}")
+        twist_lines.append(f"  Panou {idx}: {label} — {desc}")
 
     narrator = getattr(brief, "narrator_personality", None)
-    narrator_desc: str = getattr(narrator, "personality_description_ro", "") if narrator else ""
+    narrator_desc: str = (
+        getattr(narrator, "personality_description_ro", "") if narrator else ""
+    )
     archetypes = list(getattr(brief, "archetypes", []))
 
-    # Build English ingredient map for concrete examples
     ingredient_en_map = _build_ingredient_english_map(player_answers)
+    all_ingredient_phrases = _collect_all_ingredient_phrases(
+        player_answers, ingredient_en_map
+    )
 
     parts: list[str] = [
-        "Ești un scenarist român de benzi desenate comice. Scrii scenarii originale.",
-        "Povestea ta va fi desenată ca o bandă desenată românească în stil comic book.",
+        "Ești un scenarist român de benzi desenate COMICE și DINAMICE.",
+        "Scrii scenarii cu acțiune fizică, consecințe absurde și umor vizual.",
+        "Fiecare panou trebuie să fie mai haotic decât cel anterior.",
         "",
         f"GEN: {genre_name}",
     ]
@@ -203,7 +320,7 @@ def _build_system_prompt(
         "",
     ]
 
-    # CHARACTER VISUAL IDENTITIES
+    # CHARACTER VISUAL IDENTITIES — injected early and referenced explicitly
     if roster is not None:
         roster_section = roster.build_system_prompt_section()
         if roster_section:
@@ -212,117 +329,193 @@ def _build_system_prompt(
                 roster_section,
                 "=" * 60,
                 "",
-                "CRITICAL: Use EXACTLY these visual descriptions in every image_prompt_en.",
-                "Do NOT change clothing color, hair, or features between panels.",
+                "IDENTITATE VIZUALĂ OBLIGATORIE:",
+                "Folosește EXACT aceste descrieri în fiecare image_prompt_en.",
+                "Culorile hainelor, părul și trăsăturile NU se schimbă între panouri.",
+                "",
+                "FORMAT OBLIGATORIU pentru descrierea fiecărui personaj în image_prompt_en:",
+            ]
+            # Show exact format for each character using real data
+            for sheet in roster.sheets:
+                fragment = sheet.to_prompt_fragment()
+                parts.append(
+                    f"  {sheet.nickname}: scriei exact → "
+                    f"\"{sheet.nickname} ({fragment})\""
+                )
+            parts += [
+                "",
+                "NICIODATĂ nu inventa altă vârstă, culoare de păr sau trăsătură.",
+                "Dacă scrie '16 ani' sau 'red hair' în loc de ce e mai sus → GREȘIT.",
+                "",
+                "REGULA ARHETIPURILOR — CRITICĂ:",
+                "NICIODATĂ nu scrie numele arhetipului (Scepticul, Expertul, Victima,",
+                "Naratorul, Martorul, Ileana Necajita, Eroul Prost etc.) în image_prompt_en.",
+                "Aceste sunt roluri INTERNE, invizibile în imagini.",
+                "Folosește EXCLUSIV nickname-ul jucătorului + descrierea vizuală de mai sus.",
                 "",
             ]
 
     # Narrative archetypes
-    parts += ["ROLURI NARATIVE (story roles only, NOT visual descriptions):"]
-    for arch in archetypes:
-        key = getattr(arch, "key", "?")
-        name_ro = getattr(arch, "name_ro", key)
-        desc_ro = getattr(arch, "description_ro", "")
-        nickname = getattr(arch, "player_nickname", "?")
-        parts.append(f"  {nickname} → rol: {name_ro} — {desc_ro}")
-        parts.append(
-            f"    In image_prompt_en: call this character '{nickname}' + visual description. "
-            f"NEVER write '{name_ro}' or '{key}' in image descriptions."
-        )
-    parts += [""]
+    if archetypes:
+        parts += ["ROLURI NARATIVE (EXCLUSIV pentru poveste, NU în image_prompt_en):"]
+        for arch in archetypes:
+            key = getattr(arch, "key", "?")
+            name_ro = getattr(arch, "name_ro", key)
+            desc_ro = getattr(arch, "description_ro", "")
+            nickname = getattr(arch, "player_nickname", "?")
+            parts.append(f"  {nickname} → {name_ro}: {desc_ro}")
+            parts.append(
+                f"  În image_prompt_en: DOAR '{nickname}' + aspect vizual. "
+                f"NICIODATĂ '{name_ro}' sau '{key}'."
+            )
+        parts += [""]
 
-    # Story structure
-    parts += ["STRUCTURA NARATIVĂ:"]
-    for i, beat in enumerate(beats[:panel_count]):
-        hint = ""
-        if act_descriptions and i == 0:
-            hint = f" — {act_descriptions[0]}"
-        elif act_descriptions and i == panel_count - 1 and len(act_descriptions) > 1:
-            hint = f" — {act_descriptions[-1]}"
-        parts.append(f"  Panou {i}: {beat}{hint}")
-
-    if twist_lines:
-        parts += ["", "RĂSTURNĂRI OBLIGATORII:"] + twist_lines
-    if narrator_desc:
-        parts += ["", f"NARATORUL: {narrator_desc}"]
-
-    # Ingredients with English translation shown explicitly
+    # Dynamic causality chain
     parts += [
+        "=" * 60,
+        "STRUCTURA CAUZALĂ — fiecare panou CAUZEAZĂ următorul:",
+        "=" * 60,
         "",
-        "INGREDIENTE FURNIZATE DE JUCĂTORI:",
-        "IMPORTANT: Tabelul de mai jos arată traducerea exactă în engleză pe care",
-        "trebuie să o folosești în image_prompt_en. NU schimba culorile.",
+        "REGULA DE AUR: Fiecare ingredient trebuie să CAUZEZE sau să SCHIMBE ceva.",
+        "Ingredientul nu este decor — este MOTIVUL pentru care se întâmplă acțiunea.",
         "",
     ]
+
+    for i in range(panel_count):
+        beat = _build_causality_beat(i, panel_count, all_ingredient_phrases)
+        camera = _get_camera_angle(i, panel_count)
+        parts.append(f"PANOU {i} — {beat['label']}:")
+        parts.append(f"  {beat['instruction']}")
+        parts.append(f"  UNGHI CAMERĂ OBLIGATORIU: {camera}")
+        parts.append("")
+
+    if twist_lines:
+        parts += ["RĂSTURNĂRI OBLIGATORII:"] + twist_lines + [""]
+    if narrator_desc:
+        parts += [f"NARATORUL: {narrator_desc}", ""]
+
+    # Ingredients with causality rules
+    parts += [
+        "=" * 60,
+        "INGREDIENTE — REGULI DE CAUZALITATE:",
+        "=" * 60,
+        "",
+    ]
+
     for pa in player_answers:
-        parts.append(f"Jucător: {pa.nickname} (rol: {pa.archetype_key})")
+        parts.append(f"Jucător: {pa.nickname}")
         for ans in pa.answers:
             role = ans.ingredient_role
             guidance_ro = _ROLE_GUIDANCE_RO.get(role, role)
-            visual_guidance = _ROLE_VISUAL_GUIDANCE_EN.get(role, "")
-            en_translation = ingredient_en_map.get(ans.answer_text, ans.answer_text)
-            line = (
-                f"  • «{ans.answer_text}» | rol: {role} ({guidance_ro})\n"
-                f"    → English for image_prompt_en: \"{en_translation}\""
+            en_translation = ingredient_en_map.get(
+                ans.answer_text, ans.answer_text
             )
-            if visual_guidance:
-                line += f"\n    → Visual: {visual_guidance}"
-            parts.append(line)
 
-    parts += [
-        "",
-        "REGULĂ CRITICĂ: Integrează fiecare ingredient organic. NU forța ca umplutură.",
-        "NU adăuga obiecte care nu sunt în lista de ingrediente (umbrele, crocodili,",
-        "animale aleatorii etc.) — dacă nu e în lista de mai sus, nu apare în imagine.",
-        "",
-    ]
+            parts.append(
+                f"  • «{ans.answer_text}» | rol: {role} ({guidance_ro})"
+            )
+            parts.append(
+                f"    → Engleză exactă pentru image_prompt_en: \"{en_translation}\""
+            )
 
-    # image_prompt_en rules
+            if role == "OBJECT":
+                parts.append(
+                    f"    → CAUZALITATE: Ce se întâmplă DIN CAUZA «{ans.answer_text}»? "
+                    f"Obiectul trebuie să provoace o reacție în lanț."
+                )
+            elif role == "LOCATION":
+                parts.append(
+                    f"    → CAUZALITATE: «{ans.answer_text}» creează o CONSTRÂNGERE fizică "
+                    f"specifică acestui loc."
+                )
+            elif role == "CHARACTER":
+                parts.append(
+                    f"    → CAUZALITATE: «{ans.answer_text}» trebuie să ACȚIONEZE activ. "
+                    f"Ce vrea? Cu cine intră în conflict?"
+                )
+            elif role in ("ATMOSPHERE", "CONCEPT"):
+                parts.append(
+                    f"    → TRADUCERE VIZUALĂ OBLIGATORIE pentru «{ans.answer_text}»:"
+                )
+                parts.append(
+                    f"       Traduce în ACȚIUNE FIZICĂ — ce face un actor de pantomimă "
+                    f"pentru a exprima «{ans.answer_text}» fără cuvinte?"
+                )
+                parts.append(
+                    f"       Nu descrie fața. Descrie CORPUL, MIȘCAREA, CONSECINȚA fizică."
+                )
+                parts.append(
+                    f"       Emoție pozitivă → corp se extinde, sare, brațe larg"
+                )
+                parts.append(
+                    f"       Emoție negativă → corp explodează sau se contractă, obiecte zboară"
+                )
+                parts.append(
+                    f"       Concept abstract → obiect care se comportă imposibil"
+                )
+            elif role == "ACTION":
+                parts.append(
+                    f"    → CAUZALITATE: «{ans.answer_text}» trebuie să se ÎNTÂMPLE "
+                    f"vizibil — capturează momentul maxim al acțiunii."
+                )
+            elif role == "NAME":
+                parts.append(
+                    f"    → CAUZALITATE: «{ans.answer_text}» trebuie să apară ca element "
+                    f"vizual recognoscibil în scenă."
+                )
+
+            parts.append("")
+
+    # Cinematic constraints
     parts += [
         "=" * 60,
-        "REGULI PENTRU image_prompt_en:",
+        "REGULI CINEMATICE — OBLIGATORII pentru fiecare image_prompt_en:",
         "=" * 60,
         "",
-        "STILUL VIZUAL OBLIGATORIU — fiecare image_prompt_en TREBUIE să înceapă cu:",
-        "  'highly detailed comic book illustration, bold dark ink outlines,",
-        "  exaggerated expressive characters, vibrant saturated colors, dramatic lighting,'",
+        "ÎNAINTE de a scrie image_prompt_en, răspunde la aceste 5 întrebări:",
+        "  1. Ce ACȚIUNE FIZICĂ se întâmplă în acest panou?",
+        "  2. Ce ingredient specific CAUZEAZĂ această acțiune?",
+        "  3. Care este UNGHIUL CAMEREI specificat pentru acest panou?",
+        "  4. Ce exprimă CORPUL fiecărui personaj? (nu doar fața)",
+        "  5. Ce este în PRIM-PLAN (mare, aproape) vs FUNDAL (mic, departe)?",
         "",
-        "CONȚINUT — pentru fiecare panou:",
-        "1. ENGLISH ONLY. ASCII ONLY. No Romanian.",
-        "2. Descrie acțiunea specifică care se întâmplă.",
-        "3. Numește fiecare personaj prin NICKNAME + descriere vizuală din CHARACTER VISUAL IDENTITIES.",
-        "4. INGREDIENT COMPLETENESS — OBLIGATORIU înainte de a scrie image_prompt_en:",
-        "   a) Citește description_ro al acestui panou.",
-        "   b) Identifică ingredientele din lista de mai sus care apar în description_ro.",
-        "   c) Copiază traducerea EXACTĂ din coloana 'English for image_prompt_en'.",
-        "      Exemplu: dacă apare 'bicicletă mov' → scrie 'purple bicycle' (nu 'blue bicycle').",
-        "   d) NU adăuga obiecte care nu sunt în lista de ingrediente.",
-        "5. LOCAȚIE: descrie mediul vizual (Venice canal, cobblestone street, etc.).",
-        "6. FĂRĂ TEXT IN IMAGINE: nu descrie speech bubbles, captions, text.",
-        "   Textul e adăugat separat de sistemul de prezentare.",
+        "VERBE INTERZISE în image_prompt_en:",
+        f"  {_BANNED_VERBS}",
         "",
-        "ARCHETYPE RULE: NICIODATĂ nu folosi nume de arhetipuri ca descrieri vizuale.",
-        "Exemplu GREȘIT: 'the Skeptic looks skeptical'",
-        "Exemplu CORECT: 'Ana, wearing vibrant red outfit and long colourful scarf,",
-        "  leans forward with narrowed eyes and crossed arms'",
+        "VERBE CINETICE OBLIGATORII — folosește cel puțin unul:",
+        f"  {_KINETIC_VERBS_EXAMPLES}",
         "",
-        "REGULI GENERALE:",
+        "COMPOZIȚIE OBLIGATORIE în fiecare image_prompt_en:",
+        "  FOREGROUND: [element mare, aproape de cameră, parțial tăiat de cadru]",
+        "  BACKGROUND: [element mic, departe, stabilește locul]",
+        "",
+        "UNGHI CAMERĂ: copiază textul exact din structura cauzală de mai sus.",
+        "",
+        "FORMAT OBLIGATORIU image_prompt_en:",
+        "  COMIC BOOK, [style tokens],",
+        "  [nickname] ([exact fragment din CHARACTER VISUAL IDENTITIES]),",
+        "  [KINETIC ACTION — ce se întâmplă fizic],",
+        "  [ingredient cu culoarea EXACTĂ],",
+        "  [body language ALL characters],",
+        "  FOREGROUND: [element specific],",
+        "  BACKGROUND: [element specific stabilind locul],",
+        "  [unghi cameră exact]",
+        "",
+        "CULORI EXACTE — CRITIC:",
+        "Dacă ingredient are culoare specificată → culoarea TREBUIE să apară exact.",
+        "Nu schimba culorile. purple bicycle → purple bicycle. golden key → golden key.",
+        "",
+        "REGULI FINALE:",
         "- description_ro, dialogue_ro, narrator_line_ro: ROMÂNĂ.",
-        "- image_prompt_en: ENGLISH ONLY, ASCII ONLY.",
-        "- description_ro: minimum 20 cuvinte.",
+        "- image_prompt_en: ENGLISH ONLY, ASCII ONLY, fără diacritice.",
+        "- description_ro: minimum 30 cuvinte, acțiune dinamică.",
         "- Toate nickname-urile jucătorilor trebuie să apară în text.",
-        "- NU genera narrator_script sau image_prompts la root level.",
-        "",
-        "=" * 60,
-        "CRITICAL OUTPUT RULE — READ THIS LAST:",
-        "=" * 60,
-        "Your ENTIRE response must be a single JSON object.",
-        "Start your response with { and end with }.",
-        "Do NOT write any text before the {.",
-        "Do NOT write any text after the }.",
-        "Do NOT write 'Aici este', 'Iată', 'Titlul poveștii', or ANY prose.",
-        "Do NOT use markdown. Do NOT use ** or * or bullet points.",
-        "ONLY output raw JSON. Nothing else. Not even a single word outside the JSON.",
+        "- Răspunde EXCLUSIV cu JSON valid. Prima linie: {. Ultima linie: }.",
+        "- INTERZIS: Nu folosi paranteze pătrate [] în image_prompt_en.",
+        "  GREȘIT: 'Ana [grabs] the bicycle'  CORECT: 'Ana grabs the bicycle'",
+        "- VENICE RULE: Dacă «Veneția» este ingredient LOCATION, TREBUIE să apară",
+        "  'Venice' în image_prompt_en pentru cel puțin un panou.",
+        "- Niciun text înainte sau după JSON. Niciun markdown.",
     ]
 
     return "\n".join(parts)
@@ -332,34 +525,59 @@ def _build_user_prompt(
     panel_count: int,
     player_names: list[str],
     player_answers: list[PlayerAnswers],
+    roster: Any | None,
     prior_errors: list[str],
 ) -> str:
-    schema_example = _build_json_schema_example(panel_count, player_answers)
+    schema_example = _build_json_schema_example(
+        panel_count, player_answers, roster
+    )
     lines: list[str] = []
 
     if prior_errors:
         lines += [
-            "Încercarea anterioară a eșuat validarea:",
+            "ERORI din încercarea anterioară — corectează-le:",
             *[f"  - {e}" for e in prior_errors],
-            "Corectează aceste probleme.",
             "",
         ]
 
     names_str = ", ".join(player_names) if player_names else "(niciun jucător)"
+
+    from .ingredient_enforcer import _translate_ingredient
+    ingredient_checks: list[str] = []
+    for pa in player_answers:
+        for ans in pa.answers:
+            en, color, obj = _translate_ingredient(
+                ans.answer_text, ans.ingredient_role
+            )
+            phrase = f"{color} {obj}" if (color and obj) else en
+            ingredient_checks.append(f"    «{ans.answer_text}» → \"{phrase}\"")
+
+    # Build character appearance checklist from actual roster
+    char_checks: list[str] = []
+    if roster is not None:
+        for sheet in roster.sheets:
+            fragment = sheet.to_prompt_fragment()
+            char_checks.append(
+                f"    {sheet.nickname} → \"{sheet.nickname} ({fragment})\""
+            )
+
     lines += [
         f"Scrie o poveste comică de bandă desenată cu exact {panel_count} panouri.",
-        f"Personajele sunt: {names_str}.",
-        "Fiecare ingredient trebuie integrat organic.",
+        f"Personaje: {names_str}.",
         "",
-        "PENTRU FIECARE image_prompt_en:",
-        "1. Începe cu: 'highly detailed comic book illustration, bold dark ink outlines,'",
-        "2. Descrie personajele prin nickname + aspect vizual exact.",
-        "3. Include EXACT traducerile din lista de ingrediente (cu culorile corecte).",
-        "4. NU adăuga obiecte care nu sunt în lista de ingrediente.",
+        "VERIFICARE OBLIGATORIE înainte de fiecare image_prompt_en:",
+        "  ✓ Verb cinetic prezent (crashes, grabs, flees, slams, etc.)?",
+        "  ✓ Unghi cameră specificat pentru acest panou?",
+        "  ✓ FOREGROUND și BACKGROUND separate și explicite?",
+        "  ✓ Culorile exacte ale ingredientelor prezente?",
+        *ingredient_checks,
+        "  ✓ Descrierile EXACTE ale personajelor din CHARACTER VISUAL IDENTITIES?",
+        *char_checks,
+        "  ✓ Zero verbe statice (stands, holds, looks, walks)?",
+        "  ✓ Zero bracket placeholders [like this] în image_prompt_en?",
+        "  ✓ Zero nume de arhetipuri în image_prompt_en?",
         "",
-        "IMPORTANT: Your entire response must be ONLY the JSON object below.",
-        "Do not write anything before or after the JSON.",
-        "Do not explain. Do not add titles. Start with { immediately.",
+        "Răspunde EXCLUSIV cu JSON. Prima linie: {. Ultima linie: }.",
         "",
         schema_example,
     ]
@@ -369,62 +587,97 @@ def _build_user_prompt(
 def _build_json_schema_example(
     panel_count: int,
     player_answers: list[PlayerAnswers],
+    roster: Any | None,
 ) -> str:
-    """Build schema example using actual ingredient translations as examples."""
+    """
+    Priority 3 fix: schema example uses actual character sheet data.
+    The LLM sees the correct age/hair/clothing format from the start.
+    """
     from .ingredient_enforcer import _translate_ingredient
 
-    # Collect actual ingredient English translations
-    ingredient_examples: list[str] = []
+    all_ingredients: list[tuple[str, str]] = []
     for pa in player_answers:
-        for ans in pa.answers[:1]:  # just first ingredient of each player for example
-            en, color, obj = _translate_ingredient(ans.answer_text, ans.ingredient_role)
-            if color and obj:
-                ingredient_examples.append(f"{color} {obj}")
-            else:
-                ingredient_examples.append(en)
+        for ans in pa.answers:
+            en, color, obj = _translate_ingredient(
+                ans.answer_text, ans.ingredient_role
+            )
+            phrase = f"{color} {obj}" if (color and obj) else en
+            all_ingredients.append((ans.answer_text, phrase))
 
-    example_objects = ", ".join(ingredient_examples) if ingredient_examples else "specific ingredient"
+    first_en = all_ingredients[0][1] if all_ingredients else "ingredient"
+    second_en = all_ingredients[1][1] if len(all_ingredients) > 1 else "second ingredient"
+    player_name = player_answers[0].nickname if player_answers else "Character"
+    second_player = player_answers[1].nickname if len(player_answers) > 1 else "Other"
+
+    # Priority 3: use actual character sheet data in the example
+    char1_fragment = "early 30s, short dark brown hair, wearing vibrant red outfit, with large round glasses"
+    char2_fragment = "early 30s, short dark brown hair, wearing deep blue outfit, with long colourful scarf"
+
+    if roster is not None:
+        sheets = list(getattr(roster, "sheets", []))
+        if len(sheets) >= 1:
+            char1_fragment = sheets[0].to_prompt_fragment()
+            player_name = sheets[0].nickname
+        if len(sheets) >= 2:
+            char2_fragment = sheets[1].to_prompt_fragment()
+            second_player = sheets[1].nickname
 
     panels = []
     for i in range(panel_count):
+        camera = _get_camera_angle(i, panel_count)
+        beat = _build_causality_beat(i, panel_count, [ro for ro, _ in all_ingredients])
+
         if i == 0:
-            # First panel: show concrete example with actual ingredients
-            example_prompt = (
-                "highly detailed comic book illustration, bold dark ink outlines, "
-                "exaggerated expressive characters, vibrant saturated colors, dramatic lighting, "
-                f"[Character1Name] (early 30s, [hair], wearing [clothing color] outfit, [feature]) "
-                f"holding a {example_objects}, shocked expression, wide eyes, "
-                "[Character2Name] ([age], [hair], wearing [clothing color] outfit, [feature]) "
-                "watching with raised eyebrows, "
-                "[environment description], dramatic lighting, strong contrast"
+            prompt = (
+                f"COMIC BOOK, highly detailed comic book illustration, bold ink outlines, "
+                f"vibrant saturated colors, dramatic lighting, "
+                f"{player_name} ({char1_fragment}) loses control of the {first_en} "
+                f"which careens toward canal edge, arms flailing wildly, face twisted in panic, "
+                f"mouth open in a scream, {second_player} ({char2_fragment}) diving sideways to dodge, "
+                f"FOREGROUND: {first_en} skidding toward camera close-up filling bottom third, "
+                f"BACKGROUND: Venice canal buildings and gondolas, bystanders reacting in shock, "
+                f"{camera}"
             )
         else:
-            example_prompt = (
-                "highly detailed comic book illustration, bold dark ink outlines, "
-                "exaggerated expressive characters, vibrant saturated colors, dramatic lighting, "
-                f"[describe panel {i} scene with character nicknames, visual appearances, "
-                f"specific ingredients with exact colors, environment, camera angle]"
+            prompt = (
+                f"COMIC BOOK, highly detailed comic book illustration, bold ink outlines, "
+                f"vibrant saturated colors, dramatic lighting, "
+                f"{player_name} ({char1_fragment}) "
+                f"crashes into / grabs / flees from / slams against "
+                f"[describe specific kinetic action involving {second_en if i % 2 else first_en}], "
+                f"{second_player} ({char2_fragment}) reacting with exaggerated expression, "
+                f"FOREGROUND: [large close element directly in action], "
+                f"BACKGROUND: [small distant location element], "
+                f"{camera}"
             )
+
         panels.append({
             "panel_index": i,
-            "description_ro": f"[Descriere scenă panou {i}, minimum 20 cuvinte]",
-            "dialogue_ro": f"[Dialog panou {i} sau șir gol]",
-            "image_prompt_en": example_prompt,
-            "narrator_line_ro": f"[Linia naratorului panou {i}]",
+            "description_ro": (
+                f"[Descriere DINAMICĂ panou {i} — {beat['label']}, "
+                f"minimum 30 cuvinte, acțiune fizică cauzată de ingrediente, ROMÂNĂ]"
+            ),
+            "dialogue_ro": (
+                "[Dialog expresiv în ROMÂNĂ — sau șir gol dacă nu e dialog]"
+            ),
+            "image_prompt_en": prompt,
+            "narrator_line_ro": (
+                "[Narator ironic, scurt, în ROMÂNĂ]"
+            ),
             "characters_in_panel": ["[archetype_key_1]", "[archetype_key_2]"],
         })
 
-    schema: dict[str, Any] = {
-        "title": "[Titlul poveștii]",
-        "panels": panels,
-    }
-    return json.dumps(schema, ensure_ascii=False, indent=2)
+    return json.dumps(
+        {
+            "title": "[Titlul poveștii — specific, amuzant, referențiază ingredientele]",
+            "panels": panels,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
 
 
-def _extract_ingredients_from_system_prompt(system_prompt: str) -> list[str]:
-    import re
-    return re.findall(r"«([^»]+)»", system_prompt)
-
+# ── Response parser ───────────────────────────────────────────────────────────
 
 def _parse_story_response(response_text: str, panel_count: int) -> Story:
     text = response_text.strip()
@@ -470,11 +723,9 @@ def _extract_json_object(text: str) -> str | None:
 
 
 def _dict_to_story(data: dict[str, Any], panel_count: int) -> Story:
-    required = ["title", "panels"]
-    missing = [f for f in required if f not in data]
+    missing = [f for f in ["title", "panels"] if f not in data]
     if missing:
-        raise ValueError(f"LLM response missing required Story fields: {missing}")
-
+        raise ValueError(f"LLM response missing: {missing}")
     raw_panels: list[dict[str, Any]] = data["panels"]
     panels: list[PanelDescription] = []
     for i, p in enumerate(raw_panels):
@@ -486,13 +737,9 @@ def _dict_to_story(data: dict[str, Any], panel_count: int) -> Story:
             narrator_line_ro=str(p.get("narrator_line_ro", "")),
             characters_in_panel=list(p.get("characters_in_panel", [])),
         ))
-
-    narrator_script = [p.narrator_line_ro for p in panels]
-    image_prompts = [p.image_prompt_en for p in panels]
-
     return Story(
         title=str(data.get("title", "")),
         panels=panels,
-        narrator_script=narrator_script,
-        image_prompts=image_prompts,
+        narrator_script=[p.narrator_line_ro for p in panels],
+        image_prompts=[p.image_prompt_en for p in panels],
     )

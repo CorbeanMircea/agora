@@ -73,16 +73,10 @@ class StoryArc:
     Each genre defines a canonical StoryArc; the CD populates it from
     the genre's template (GDD Section 6.3).
     """
-    # Ordered list of narrative beat labels for each panel.
-    # e.g. ["secret_revealed", "denial", "confrontation", "twist", "freeze_frame"]
     beats: list[str]
-
-    # Short prose description of what happens in each act.
-    # Typically 2–3 acts compressed into the panel count.
-    act_descriptions: list[str]
-
-    # The index (0-based) of the punchline / climax beat.
-    climax_beat_index: int
+    act_descriptions: list[str] = field(default_factory=list)
+    climax_beat_index: int = 0
+    causality_beats: list[dict] = field(default_factory=list)  # ← add this line
 
 
 @dataclass

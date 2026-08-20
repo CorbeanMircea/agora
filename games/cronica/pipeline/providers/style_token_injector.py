@@ -30,7 +30,7 @@ from ..creative_director.models import PresentationFormat
 # Matches the reference image: bold Romanian comic-book illustration.
 #
 _GLOBAL_STYLE_POSITIVE: list[str] = [
-    "Bradhamel art style",
+    "COMIC BOOK",
     "comic book illustration",
     "bold ink outlines",
     "exaggerated expressive characters",

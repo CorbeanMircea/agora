@@ -5,12 +5,15 @@ Generates panels sequentially. After panel 1 completes:
 - Its output path is stored as the reference image.
 - Panels 2-5 receive IP-Adapter conditioning from panel 1.
 
-This gives character/style consistency across all panels.
+Priority 1 fix: character descriptions are injected deterministically
+from the CharacterRoster AFTER the LLM generates prompts, overwriting
+any invented appearance details.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -64,8 +67,8 @@ class PanelCompositionOrchestrator:
     Panel 4 → text + IP-Adapter(panel_1)
     Panel 5 → text + IP-Adapter(panel_1)
 
-    We always use panel 1 as the reference (not the previous panel) to prevent
-    style drift where each panel drifts slightly further from the original.
+    Character descriptions are injected deterministically from the roster
+    after LLM generation, overwriting any invented appearance details.
     """
 
     def __init__(
@@ -95,20 +98,22 @@ class PanelCompositionOrchestrator:
 
         roster = self._build_roster(brief, output_dir)
         image_prompts = self._build_prompts(brief, story, roster)
-        results: list[PanelResult] = []
 
-        # Reference image is None for panel 1 (text-only)
-        # Set to panel 1 output path after it completes
+        # Priority 1: Enforce character descriptions deterministically
+        if roster is not None:
+            image_prompts = self._enforce_character_descriptions(
+                image_prompts, roster
+            )
+
+        results: list[PanelResult] = []
         reference_path: Path | None = None
 
         for prompt in image_prompts:
-            # Set reference on generator before each panel
             self._generator.reference_image_path = reference_path
 
             result = self._generate_one_panel(prompt, brief, output_dir)
             results.append(result)
 
-            # After panel 1 succeeds, use it as reference for all subsequent panels
             if prompt.panel_index == 0 and not result.is_fallback:
                 reference_path = result.file_path
                 log.info(
@@ -117,7 +122,7 @@ class PanelCompositionOrchestrator:
                 )
             elif prompt.panel_index == 0 and result.is_fallback:
                 log.warning(
-                    "Panel 1 failed — subsequent panels will use text-only (no reference)"
+                    "Panel 1 failed — subsequent panels will use text-only"
                 )
 
             log.info(
@@ -145,6 +150,8 @@ class PanelCompositionOrchestrator:
                 else None
             ),
         )
+
+    # ── Private helpers ───────────────────────────────────────────────────────
 
     def _build_roster(self, brief: Any, output_dir: Path) -> CharacterRoster | None:
         try:
@@ -174,11 +181,14 @@ class PanelCompositionOrchestrator:
                     if dialogue and dialogue.strip():
                         prompt.base_prompt = (
                             prompt.base_prompt.rstrip(", ") +
-                            ", characters engaged in animated conversation, expressive gestures"
+                            ", characters engaged in animated conversation, "
+                            "expressive gestures"
                         )
             return prompts
         except Exception as exc:
-            log.warning("Prompt building failed (%s) — using bare base prompts", exc)
+            log.warning(
+                "Prompt building failed (%s) — using bare base prompts", exc
+            )
             panel_count: int = int(getattr(brief, "panel_count", 5))
             panels = list(getattr(story, "panels", []))
             return [
@@ -192,6 +202,93 @@ class PanelCompositionOrchestrator:
                 )
                 for i in range(panel_count)
             ]
+
+    def _enforce_character_descriptions(
+        self,
+        prompts: list[ImagePrompt],
+        roster: CharacterRoster,
+    ) -> list[ImagePrompt]:
+        """
+        Priority 1 fix: overwrite LLM-invented character appearances with
+        verbatim character sheet descriptions.
+
+        For each character in each panel:
+        1. Find the nickname in the image prompt
+        2. Remove whatever parenthetical appearance the LLM wrote after it
+        3. Insert the canonical appearance from the character sheet
+
+        Also ensures BOTH characters appear in multi-character panels.
+        """
+        updated: list[ImagePrompt] = []
+
+        for prompt in prompts:
+            new_base = prompt.base_prompt
+
+            for sheet in roster.sheets:
+                nickname = sheet.nickname
+                canonical = sheet.to_prompt_fragment()
+
+                # Pattern: nickname followed by LLM-invented parenthetical
+                # e.g. "Ana (16, red hair, wearing blue outfit, freckles)"
+                # Replace with canonical: "Ana (early 30s, short dark brown hair, ...)"
+                pattern = re.compile(
+                    r'\b' + re.escape(nickname) +
+                    r'\s*\([^)]*\)',
+                    re.IGNORECASE,
+                )
+
+                if pattern.search(new_base):
+                    new_base = pattern.sub(
+                        f"{nickname} ({canonical})",
+                        new_base,
+                    )
+                    log.info(
+                        "Panel %d: replaced invented appearance for %s",
+                        prompt.panel_index, nickname,
+                    )
+                elif nickname.lower() in new_base.lower():
+                    # Nickname present but no parenthetical — insert canonical
+                    new_base = re.sub(
+                        r'\b' + re.escape(nickname) + r'\b',
+                        f"{nickname} ({canonical})",
+                        new_base,
+                        count=1,
+                        flags=re.IGNORECASE,
+                    )
+                    log.info(
+                        "Panel %d: inserted canonical appearance for %s",
+                        prompt.panel_index, nickname,
+                    )
+
+            # Ensure second character appears if archetype keys suggest they should
+            # but their name is missing from the prompt
+            archetype_keys = list(getattr(prompt, "character_descriptions", []))
+            for sheet in roster.sheets:
+                if sheet.nickname.lower() not in new_base.lower():
+                    # Check if this character should be in this panel
+                    # via the story's characters_in_panel field
+                    if _should_character_appear(sheet, prompt):
+                        log.info(
+                            "Panel %d: inserting missing character %s",
+                            prompt.panel_index, sheet.nickname,
+                        )
+                        canonical = sheet.to_prompt_fragment()
+                        new_base = (
+                            new_base.rstrip(", .") +
+                            f", {sheet.nickname} ({canonical}) also present "
+                            f"in scene, reacting with exaggerated expression"
+                        )
+
+            updated.append(ImagePrompt(
+                panel_index=prompt.panel_index,
+                base_prompt=new_base,
+                style_tokens_positive=prompt.style_tokens_positive,
+                style_tokens_negative=prompt.style_tokens_negative,
+                camera_tokens=prompt.camera_tokens,
+                character_descriptions=prompt.character_descriptions,
+            ))
+
+        return updated
 
     def _generate_one_panel(
         self,
@@ -247,3 +344,22 @@ class PanelCompositionOrchestrator:
             generation_seconds=0.0,
             error="Unexpected loop exit",
         )
+
+
+def _should_character_appear(sheet: Any, prompt: ImagePrompt) -> bool:
+    """
+    Heuristic: decide if a character should appear in this panel.
+    Uses the character_descriptions list on the prompt (set by StyleTokenInjector
+    from characters_in_panel in the story).
+    Returns True if the character's archetype_key is referenced.
+    """
+    descriptions = list(getattr(prompt, "character_descriptions", []))
+    archetype_key = getattr(sheet, "archetype_key", "")
+    nickname = getattr(sheet, "nickname", "")
+
+    for desc in descriptions:
+        if archetype_key.lower() in desc.lower():
+            return True
+        if nickname.lower() in desc.lower():
+            return True
+    return False

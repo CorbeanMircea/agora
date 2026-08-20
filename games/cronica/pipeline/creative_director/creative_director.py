@@ -187,8 +187,10 @@ class CreativeDirector:
             )
         archetypes = [a.archetype for a in assigned]
 
-        # ── 7. Story structure ────────────────────────────────────────────
-        story_structure = self._build_story_structure(genre, panel_count, rng)
+        # ── 7. Story structure (Change F: dynamic causality chain) ────────
+        story_structure = self._build_story_structure(
+            genre, panel_count, rng, player_answers
+        )
 
         # ── 8. Twists (1–2 per round) ─────────────────────────────────────
         twists = self._generate_twists(panel_count, rng)
@@ -287,11 +289,8 @@ class CreativeDirector:
         candidates = [c for c in genre.panel_counts if c in format_counts]
 
         if not candidates:
-            # Fallback: any count supported by either, preferring genre's first choice
             candidates = genre.panel_counts or fmt_def.supported_panel_counts
 
-        # Use the first (preferred) candidate, but apply light randomness
-        # so not every game uses the exact same panel count
         if len(candidates) == 1:
             return candidates[0]
 
@@ -323,28 +322,69 @@ class CreativeDirector:
         genre: GenreDefinition,
         panel_count: int,
         rng: random.Random,
+        player_answers: list[PlayerAnswer] | None = None,
     ) -> StoryArc:
         """
-        Build a StoryArc from the genre template, trimmed/padded to panel_count.
+        Change F: Build a StoryArc with a dynamic causality chain derived
+        from actual player ingredients.
+
+        The causality beats are constructed from the real ingredient answers
+        so the story structure is always tailored to what players submitted.
+        No hardcoded Romanian words or fixed panel assumptions.
+
+        Falls back to genre template beats if player_answers is not provided.
         """
+        # Collect all ingredient answer texts from all players
+        all_ingredient_answers: list[str] = []
+        if player_answers:
+            for pa in player_answers:
+                for ans in pa.answers:
+                    text = ans.get("answer_text", "").strip()
+                    if text:
+                        all_ingredient_answers.append(text)
+
+        if all_ingredient_answers:
+            # Build causality beats from actual player ingredients
+            causality_beats = [
+                _build_causality_beat(i, panel_count, all_ingredient_answers)
+                for i in range(panel_count)
+            ]
+            beats = [b["label"] for b in causality_beats]
+            act_descriptions = [b["instruction"] for b in causality_beats]
+        else:
+            # Fallback: use genre template
+            template = genre.story_structure
+            beats = list(template.beats)
+            act_descriptions = list(template.act_descriptions)
+            causality_beats = [
+                {"label": b, "instruction": d}
+                for b, d in zip(beats, act_descriptions)
+            ]
+
+        # Trim or pad beats to match panel_count
+        while len(beats) > panel_count:
+            beats.pop()
+            act_descriptions.pop()
+            causality_beats.pop()
+        while len(beats) < panel_count:
+            i = len(beats)
+            extra = _build_causality_beat(i, panel_count, all_ingredient_answers)
+            beats.append(extra["label"])
+            act_descriptions.append(extra["instruction"])
+            causality_beats.append(extra)
+
+        # Clamp climax index
         template = genre.story_structure
-        beats = list(template.beats)
-
-        # Trim or extend beats to match panel_count
-        if len(beats) > panel_count:
-            beats = beats[:panel_count]
-        elif len(beats) < panel_count:
-            # Pad with extra beats (repeat last beat with index suffix)
-            while len(beats) < panel_count:
-                beats.append(f"{beats[-1]}_continuare_{len(beats)}")
-
-        # Clamp climax index within the actual beat list
-        climax = min(template.climax_beat_index, len(beats) - 1)
+        climax = min(
+            getattr(template, "climax_beat_index", panel_count - 2),
+            len(beats) - 1,
+        )
 
         return StoryArc(
             beats=beats,
-            act_descriptions=list(template.act_descriptions),
+            act_descriptions=act_descriptions,
             climax_beat_index=climax,
+            causality_beats=causality_beats,
         )
 
     def _generate_twists(
@@ -354,14 +394,9 @@ class CreativeDirector:
     ) -> list[Twist]:
         """
         Generate 1–2 twists at appropriate panel indices.
-
-        Twist placement rules:
-        - At least one twist at the climax panel (panel_count - 2 or -1).
-        - Optional second twist at the midpoint for longer comics.
         """
         twists: list[Twist] = []
 
-        # Main twist near the end
         main_twist_panel = max(0, panel_count - 2)
         twists.append(Twist(
             panel_index=main_twist_panel,
@@ -369,7 +404,6 @@ class CreativeDirector:
             is_final_twist=True,
         ))
 
-        # Second twist at midpoint for comics with 6+ panels
         if panel_count >= 6:
             mid_panel = panel_count // 2
             twists.append(Twist(
@@ -388,14 +422,10 @@ class CreativeDirector:
     ) -> list[CameraRule]:
         """
         Build camera rules for exactly panel_count panels.
-
-        Uses genre templates, trimming if too many or cycling if too few.
-        Panel indices are rewritten to be 0-based and sequential.
         """
         templates = list(genre.camera_language_templates)
 
         if not templates:
-            # Minimal fallback
             return [
                 CameraRule(
                     panel_index=i,
@@ -439,10 +469,6 @@ class CreativeDirector:
         genre: GenreDefinition,
         rng: random.Random,
     ) -> str:
-        """
-        Pick or generate a subgenre label.
-        Uses the genre's tagline as the default subgenre descriptor.
-        """
         return genre.tagline_ro
 
     def _validate_brief(
@@ -452,12 +478,9 @@ class CreativeDirector:
     ) -> None:
         """
         Validate that the generated brief satisfies structural requirements.
-
-        Raises CreativeBriefValidationError on failure.
         """
         errors: list[str] = []
 
-        # Required string fields must be non-empty
         required_str_fields = [
             ("genre", brief.genre),
             ("genre_key", brief.genre_key),
@@ -471,25 +494,24 @@ class CreativeDirector:
             if not value:
                 errors.append(f"Required field '{name}' is empty")
 
-        # Panel count validity
         if brief.panel_count not in (4, 5, 6, 8):
-            errors.append(f"panel_count {brief.panel_count} must be 4, 5, 6, or 8")
+            errors.append(
+                f"panel_count {brief.panel_count} must be 4, 5, 6, or 8"
+            )
 
-        # Story structure beats must match panel count
         if len(brief.story_structure.beats) != brief.panel_count:
             errors.append(
-                f"story_structure.beats length {len(brief.story_structure.beats)} "
+                f"story_structure.beats length "
+                f"{len(brief.story_structure.beats)} "
                 f"!= panel_count {brief.panel_count}"
             )
 
-        # Camera language must have exactly panel_count entries
         if len(brief.camera_language) != brief.panel_count:
             errors.append(
                 f"camera_language length {len(brief.camera_language)} "
                 f"!= panel_count {brief.panel_count}"
             )
 
-        # Archetypes: one per player, no duplicates
         if len(brief.archetypes) != len(player_answers):
             errors.append(
                 f"archetypes count {len(brief.archetypes)} "
@@ -500,7 +522,6 @@ class CreativeDirector:
         if len(archetype_keys) != len(set(archetype_keys)):
             errors.append("Duplicate archetype keys in brief")
 
-        # Twists must reference valid panel indices
         for twist in brief.twists:
             if not (0 <= twist.panel_index < brief.panel_count):
                 errors.append(
@@ -508,22 +529,20 @@ class CreativeDirector:
                     f"[0, {brief.panel_count})"
                 )
 
-        # Punchline panel must be valid
         if not (0 <= brief.punchline_panel < brief.panel_count):
             errors.append(
                 f"punchline_panel {brief.punchline_panel} out of range "
                 f"[0, {brief.panel_count})"
             )
 
-        # Comedy level in range
         if not (1 <= brief.comedy_level <= 10):
-            errors.append(f"comedy_level {brief.comedy_level} out of range [1, 10]")
+            errors.append(
+                f"comedy_level {brief.comedy_level} out of range [1, 10]"
+            )
 
-        # Colour palette minimum
         if len(brief.colour_palette) < 3:
             errors.append("colour_palette must have at least 3 colours")
 
-        # Tone keywords
         if len(brief.tone_keywords) < 1:
             errors.append("tone_keywords must have at least 1 entry")
 
@@ -546,3 +565,103 @@ class CreativeDirector:
             brief.to_json(indent=2),
             encoding="utf-8",
         )
+
+
+# ── Module-level causality beat builder ───────────────────────────────────────
+# Defined at module level so it can be imported by ollama_story_llm.py
+# without circular imports.
+
+def _build_causality_beat(
+    panel_index: int,
+    panel_count: int,
+    all_ingredient_answers: list[str],
+) -> dict[str, str]:
+    """
+    Build a causality beat for a specific panel position.
+
+    Fully dynamic — uses actual ingredient answers from players.
+    No hardcoded Romanian words or fixed assumptions about ingredients.
+    Scales to any panel count.
+
+    Parameters
+    ----------
+    panel_index:
+        0-based index of this panel.
+    panel_count:
+        Total number of panels in the strip.
+    all_ingredient_answers:
+        List of all player ingredient answer texts (Romanian originals).
+        Used to build contextual beat instructions.
+    """
+    ingredient_list = ", ".join(
+        f"«{a}»" for a in all_ingredient_answers
+    ) if all_ingredient_answers else "(ingrediente jucători)"
+
+    position = panel_index / max(panel_count - 1, 1)
+
+    if panel_index == 0:
+        return {
+            "label": "DECLANȘATOR",
+            "instruction": (
+                f"Unul dintre aceste ingrediente declanșează o criză neașteptată: "
+                f"{ingredient_list}. "
+                "Ceva merge COMPLET greșit sau se întâmplă ceva fizic imposibil. "
+                "NU o introducere liniștită — povestea începe deja în haos. "
+                "Ingredientul este CAUZA directă a crizei, nu doar un element de decor. "
+                "Primul panou trebuie să fie cel mai surprinzător vizual posibil."
+            ),
+        }
+
+    if panel_index == panel_count - 1:
+        return {
+            "label": "REZOLUȚIE ABSURDĂ",
+            "instruction": (
+                f"Rezoluție care referențiază TOATE ingredientele vizual: "
+                f"{ingredient_list}. "
+                "Personajele sunt acum într-o relație complet nouă cu obiectele "
+                "și unele cu altele față de panoul 0. "
+                "Finalul trebuie să fie AMUZANT și ABSURD — cel puțin un detaliu "
+                "vizual care nu ar fi posibil fără combinația exactă de ingrediente. "
+                "Nu un final liniștit — un final care provoacă râs prin absurditate."
+            ),
+        }
+
+    if position <= 0.35:
+        return {
+            "label": "REACȚIE",
+            "instruction": (
+                f"Un personaj face o alegere fizică DISPERATĂ ca răspuns direct "
+                f"la criza din panoul anterior. "
+                f"Legătură cauzală directă — fără salt în timp sau explicații. "
+                f"Acțiunea lor implică în mod direct unul dintre: {ingredient_list}. "
+                "Fug, apucă, urmăresc, confruntă sau încearcă ceva complet greșit. "
+                "Consecința acțiunii lor trebuie să fie vizibilă și imediată."
+            ),
+        }
+
+    if position <= 0.65:
+        return {
+            "label": "ESCALADARE",
+            "instruction": (
+                f"Consecința acțiunii anterioare înrăutățește totul exponențial. "
+                f"Un ingredient diferit din {ingredient_list} intră în scenă "
+                f"și complică situația în mod neașteptat. "
+                "Mai multe personaje implicate, mediu mai mare, mize mult mai mari. "
+                "Haosul se înmulțește — situația scapă de sub control complet. "
+                "Acest panou trebuie să fie mai dinamic vizual decât cel anterior."
+            ),
+        }
+
+    # position > 0.65 and not last panel → twist
+    return {
+        "label": "RĂSTURNARE",
+        "instruction": (
+            f"O utilizare complet neașteptată a unui ingredient din "
+            f"{ingredient_list} schimbă totul. "
+            "Ceva care părea o problemă insurmontabilă devine brusc soluția — "
+            "sau invers, soluția aparentă creează o problemă și mai mare. "
+            "Ingredientul face ceva ce fizic nu ar trebui să fie posibil. "
+            "Panoul cu surpriza maximă — vizual cel mai dinamic și neașteptat. "
+            "Personajele reacționează cu expresii și gesturi exagerate la maxim."
+        ),
+    }
